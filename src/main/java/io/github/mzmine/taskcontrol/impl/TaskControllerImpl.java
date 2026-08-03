@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022 The MZmine Development Team
+ * Copyright (c) 2004-2024 The MZmine Development Team
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -18,9 +18,9 @@
  * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
  * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
  * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  */
 
 package io.github.mzmine.taskcontrol.impl;
@@ -41,11 +41,16 @@ import io.github.mzmine.taskcontrol.TaskStatus;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.Vector;
 import java.util.logging.Logger;
 
 /**
- * Task controller implementation
+ * Task controller implementation.
+ *
+ * <p>The blocking execution adapter is selectively adapted from the public MIT-licensed controller
+ * revision at commit {@code 001a0c3c672d09a141faa56b42c7c145246f9dd6}. It deliberately keeps the
+ * original MZmine 3.9 queue and worker-thread scheduler unchanged.</p>
  */
 public class TaskControllerImpl implements TaskController, Runnable {
 
@@ -89,6 +94,24 @@ public class TaskControllerImpl implements TaskController, Runnable {
   @Override
   public TaskQueue getTaskQueue() {
     return taskQueue;
+  }
+
+  @Override
+  public TaskQueue getSubmittedTaskQueue() {
+    return taskQueue;
+  }
+
+  @Override
+  public WrappedTask runTaskOnThisThreadBlocking(final Task task) {
+    Objects.requireNonNull(task, "task");
+
+    final WrappedTask wrappedTask = new WrappedTask(task, task.getTaskPriority());
+    // Constructing the worker marks the wrapper as assigned before it becomes visible to the
+    // asynchronous scheduler. This prevents a race that could otherwise execute the task twice.
+    final WorkerThread worker = new WorkerThread(wrappedTask);
+    taskQueue.addWrappedTask(wrappedTask);
+    worker.run();
+    return wrappedTask;
   }
 
   @Override
