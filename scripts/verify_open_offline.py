@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Verify that the independent fork stays free of proprietary login code.
 
-The audit scans build/config/source files, bundled JAR contents, and selected startup
-classes that must never initiate outbound network access.
+The audit scans production build/config/source files, bundled JAR contents, and selected startup
+classes that must never initiate outbound network access. Test sources are excluded from the broad
+text scan because policy tests intentionally contain the forbidden strings they assert against.
 """
 
 from __future__ import annotations
@@ -65,14 +66,28 @@ STARTUP_NETWORK_PATTERNS = {
 }
 
 
+def relative_parts(path: Path) -> tuple[str, ...]:
+    return path.relative_to(ROOT).parts
+
+
 def is_ignored(path: Path) -> bool:
-    return any(part in IGNORED_DIRS for part in path.relative_to(ROOT).parts)
+    return any(part in IGNORED_DIRS for part in relative_parts(path))
+
+
+def is_test_source(path: Path) -> bool:
+    parts = relative_parts(path)
+    return len(parts) >= 2 and parts[0] == "src" and parts[1] == "test"
 
 
 def scan_text_files() -> list[str]:
     findings: list[str] = []
     for path in ROOT.rglob("*"):
-        if not path.is_file() or is_ignored(path) or path.suffix.lower() not in TEXT_SUFFIXES:
+        if (
+            not path.is_file()
+            or is_ignored(path)
+            or is_test_source(path)
+            or path.suffix.lower() not in TEXT_SUFFIXES
+        ):
             continue
         try:
             text = path.read_text(encoding="utf-8")
