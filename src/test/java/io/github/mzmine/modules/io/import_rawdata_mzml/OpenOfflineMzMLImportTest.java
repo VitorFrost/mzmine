@@ -21,6 +21,7 @@
  */
 package io.github.mzmine.modules.io.import_rawdata_mzml;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.Test;
 /** Verifies that the open-offline baseline can parse a small mzML file without GUI interaction. */
 class OpenOfflineMzMLImportTest {
 
+  private static final double TOLERANCE = 0.0001;
   private static final Path FIXTURE =
       Path.of("src", "test", "resources", "open_offline", "sciex_two_scan.mzML");
 
@@ -71,12 +73,20 @@ class OpenOfflineMzMLImportTest {
       assertEquals(1, ms1.getMSLevel());
       assertEquals(3, ms1.getNumberOfDataPoints());
       assertRange(ms1.getDataPointMZRange(), 100.0, 300.0);
+      assertArrayEquals(new double[]{100.0, 200.0, 300.0},
+          ms1.getMzValues(new double[3]), TOLERANCE);
+      assertArrayEquals(new double[]{1000.0, 5000.0, 2000.0},
+          ms1.getIntensityValues(new double[3]), TOLERANCE);
 
       final Scan ms2 = raw.getScan(1);
       assertNotNull(ms2);
       assertEquals(2, ms2.getMSLevel());
       assertEquals(2, ms2.getNumberOfDataPoints());
       assertRange(ms2.getDataPointMZRange(), 105.0, 150.0);
+      assertArrayEquals(new double[]{105.0, 150.0},
+          ms2.getMzValues(new double[2]), TOLERANCE);
+      assertArrayEquals(new double[]{800.0, 3000.0},
+          ms2.getIntensityValues(new double[2]), TOLERANCE);
     } finally {
       raw.close();
     }
@@ -85,7 +95,7 @@ class OpenOfflineMzMLImportTest {
   private static void assertRange(final Range<Double> range, final double lower,
       final double upper) {
     assertNotNull(range);
-    assertEquals(lower, range.lowerEndpoint(), 0.0001);
-    assertEquals(upper, range.upperEndpoint(), 0.0001);
+    assertEquals(lower, range.lowerEndpoint(), TOLERANCE);
+    assertEquals(upper, range.upperEndpoint(), TOLERANCE);
   }
 }
