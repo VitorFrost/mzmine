@@ -36,6 +36,7 @@ import io.github.mzmine.taskcontrol.Task;
 import io.github.mzmine.taskcontrol.TaskControlListener;
 import io.github.mzmine.taskcontrol.TaskController;
 import io.github.mzmine.taskcontrol.TaskPriority;
+import io.github.mzmine.taskcontrol.TaskService;
 import io.github.mzmine.taskcontrol.TaskStatus;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,6 +69,7 @@ public class TaskControllerImpl implements TaskController, Runnable {
 
 
   private TaskControllerImpl() {
+    TaskService.init(this);
     logger.finest("Starting task controller thread");
     taskQueue = new TaskQueue();
 
