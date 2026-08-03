@@ -41,6 +41,13 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Check out untouched MZmine 3.9.0 baseline
+        uses: actions/checkout@v4
+        with:
+          ref: 2ac3ce3b25190430f3ae0e02c28ddbb94bc248ed
+          path: baseline-mzmine-3.9
+          fetch-depth: 1
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -55,11 +62,12 @@ jobs:
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Show tool versions
+      - name: Show tool versions and baseline commit
         shell: bash
         run: |
           java -version
           ./gradlew --version
+          git -C baseline-mzmine-3.9 rev-parse HEAD
 
       - name: Compile and test on Linux
         if: runner.os != 'Windows'
@@ -76,6 +84,9 @@ jobs:
       - name: Run deterministic headless batch reference
         run: python scripts/test_headless_batch.py
 
+      - name: Compare with untouched MZmine 3.9.0
+        run: python scripts/compare_unmodified_39.py baseline-mzmine-3.9
+
       - name: Upload test reports after failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -85,5 +96,7 @@ jobs:
             build/reports/tests/
             build/test-results/
             build/open_offline_headless/
+            baseline-mzmine-3.9/build/reports/tests/
+            baseline-mzmine-3.9/build/test-results/
           if-no-files-found: ignore
           retention-days: 7
