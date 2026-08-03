@@ -23,6 +23,7 @@ package io.github.mzmine.taskcontrol;
 
 import java.util.Objects;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Process-local access point for the open-source task controller.
@@ -75,8 +76,14 @@ public final class TaskService {
     return current;
   }
 
-  /** Clears global state between unit tests. Not part of the production API. */
-  static synchronized void resetForTesting() {
-    controller = null;
+  /**
+   * Temporarily replaces the global controller for an isolated unit test and returns the previous
+   * value. Package-private by design; production code must use {@link #init(TaskController)}.
+   */
+  @Nullable
+  static synchronized TaskController replaceForTesting(@Nullable final TaskController replacement) {
+    final TaskController previous = controller;
+    controller = replacement;
+    return previous;
   }
 }
