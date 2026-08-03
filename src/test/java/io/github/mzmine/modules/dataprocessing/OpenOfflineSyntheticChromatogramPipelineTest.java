@@ -28,9 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.google.common.collect.Range;
 import io.github.mzmine.datamodel.MZmineProject;
 import io.github.mzmine.datamodel.RawDataFile;
 import io.github.mzmine.datamodel.Scan;
+import io.github.mzmine.datamodel.featuredata.FeatureDataUtils;
 import io.github.mzmine.datamodel.features.FeatureList;
 import io.github.mzmine.datamodel.features.FeatureListRow;
 import io.github.mzmine.main.MZmineCore;
@@ -38,6 +40,9 @@ import io.github.mzmine.modules.MZmineProcessingStep;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ADAPChromatogramBuilderParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderModule;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderTask;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.FeatureResolverTask;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.GeneralResolverParameters;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolverParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionTask;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetector;
@@ -48,6 +53,7 @@ import io.github.mzmine.modules.impl.MZmineProcessingStepImpl;
 import io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportModule;
 import io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportParameters;
 import io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportTask;
+import io.github.mzmine.parameters.parametertypes.OriginalFeatureListHandlingParameter.OriginalFeatureListOption;
 import io.github.mzmine.parameters.parametertypes.selectors.ScanSelection;
 import io.github.mzmine.parameters.parametertypes.tolerances.MZTolerance;
 import io.github.mzmine.project.impl.MZmineProjectImpl;
@@ -73,8 +79,9 @@ import org.junit.jupiter.api.Test;
  * End-to-end deterministic test for the first scientific portion of the open-offline pipeline.
  *
  * <p>The human-readable CSV profile is converted to mzML, imported, processed by the centroid mass
- * detector, and connected into chromatograms by the MZmine 3.9 ADAP builder. No login, network,
- * vendor reader, or proprietary component is involved.</p>
+ * detector, connected into chromatograms by the MZmine 3.9 ADAP builder, and resolved by the local
+ * minimum feature resolver. No login, network, vendor reader, or proprietary component is
+ * involved.</p>
  */
 class OpenOfflineSyntheticChromatogramPipelineTest {
 
@@ -85,7 +92,7 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
   private static final double[] MZ_VALUES = {75.0, 150.0, 300.0, 500.0};
 
   @Test
-  void importsDetectsMassesAndBuildsTwoDeterministicChromatograms() throws IOException {
+  void importsDetectsBuildsAndResolvesTwoDeterministicFeatures() throws IOException {
     Locale.setDefault(Locale.US);
     final Path mzml = Files.createTempFile("mzmine-open-offline-", ".mzML");
     final List<ProfileScan> profile = loadProfile();
@@ -102,8 +109,12 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
       runCentroidMassDetection(raw);
       assertMassDetectionResult(raw);
 
-      final FeatureList featureList = runChromatogramBuilder(project, raw);
-      assertChromatogramResult(featureList);
+      final FeatureList chromatograms = runChromatogramBuilder(project, raw);
+      assertFeatureProperties(chromatograms);
+
+      final FeatureList resolved = runFeatureResolver(project, chromatograms);
+      assertFeatureProperties(resolved);
+      assertEquals(2, project.getNumberOfFeatureLists());
     } finally {
       // Replacing the project closes imported raw data and releases mapped resources.
       MZmineCore.getProjectManager().setCurrentProject(new MZmineProjectImpl());
@@ -203,7 +214,35 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
     return project.getCurrentFeatureLists().get(0);
   }
 
-  private static void assertChromatogramResult(final FeatureList featureList) {
+  private static FeatureList runFeatureResolver(final MZmineProject project,
+      final FeatureList chromatograms) {
+    final MinimumSearchFeatureResolverParameters parameters =
+        new MinimumSearchFeatureResolverParameters();
+    parameters.setParameter(GeneralResolverParameters.SUFFIX, "resolved");
+    parameters.setParameter(GeneralResolverParameters.handleOriginal,
+        OriginalFeatureListOption.KEEP);
+    parameters.getParameter(GeneralResolverParameters.groupMS2Parameters).setValue(false);
+    parameters.setParameter(
+        MinimumSearchFeatureResolverParameters.CHROMATOGRAPHIC_THRESHOLD_LEVEL, 0.0);
+    parameters.setParameter(MinimumSearchFeatureResolverParameters.SEARCH_RT_RANGE, 0.2);
+    parameters.setParameter(MinimumSearchFeatureResolverParameters.MIN_RELATIVE_HEIGHT, 0.0);
+    parameters.setParameter(MinimumSearchFeatureResolverParameters.MIN_ABSOLUTE_HEIGHT, 500.0);
+    parameters.setParameter(MinimumSearchFeatureResolverParameters.MIN_RATIO, 1.2);
+    parameters.setParameter(MinimumSearchFeatureResolverParameters.PEAK_DURATION,
+        Range.closed(0.2, 1.5));
+    parameters.setParameter(GeneralResolverParameters.MIN_NUMBER_OF_DATAPOINTS, 3);
+
+    final FeatureResolverTask task = new FeatureResolverTask(project, null, chromatograms,
+        parameters, FeatureDataUtils.DEFAULT_CENTER_FUNCTION, MODULE_DATE);
+    task.run();
+
+    assertEquals(TaskStatus.FINISHED, task.getStatus(), task::getErrorMessage);
+    assertEquals(1.0, task.getFinishedPercentage(), DOUBLE_TOLERANCE);
+    assertEquals(2, project.getNumberOfFeatureLists());
+    return project.getCurrentFeatureLists().get(1);
+  }
+
+  private static void assertFeatureProperties(final FeatureList featureList) {
     assertEquals(2, featureList.getNumberOfRows());
 
     final List<FeatureListRow> rows = new ArrayList<>(featureList.getRows());
