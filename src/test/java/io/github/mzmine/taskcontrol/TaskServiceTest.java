@@ -31,14 +31,16 @@ import org.junit.jupiter.api.Test;
 
 class TaskServiceTest {
 
+  private TaskController previousController;
+
   @BeforeEach
-  void resetBeforeTest() {
-    TaskService.resetForTesting();
+  void isolateServiceState() {
+    previousController = TaskService.replaceForTesting(null);
   }
 
   @AfterEach
-  void resetAfterTest() {
-    TaskService.resetForTesting();
+  void restoreServiceState() {
+    TaskService.replaceForTesting(previousController);
   }
 
   @Test
