@@ -33,10 +33,14 @@ import io.github.mzmine.datamodel.MZmineProject;
 import io.github.mzmine.datamodel.RawDataFile;
 import io.github.mzmine.datamodel.Scan;
 import io.github.mzmine.datamodel.featuredata.FeatureDataUtils;
+import io.github.mzmine.datamodel.features.Feature;
 import io.github.mzmine.datamodel.features.FeatureList;
 import io.github.mzmine.datamodel.features.FeatureListRow;
+import io.github.mzmine.datamodel.features.ModularFeatureList;
 import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.modules.MZmineProcessingStep;
+import io.github.mzmine.modules.dataprocessing.align_join.JoinAlignerParameters;
+import io.github.mzmine.modules.dataprocessing.align_join.JoinAlignerTask;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ADAPChromatogramBuilderParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderModule;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderTask;
@@ -54,8 +58,11 @@ import io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportModule;
 import io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportParameters;
 import io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportTask;
 import io.github.mzmine.parameters.parametertypes.OriginalFeatureListHandlingParameter.OriginalFeatureListOption;
+import io.github.mzmine.parameters.parametertypes.selectors.FeatureListsSelection;
 import io.github.mzmine.parameters.parametertypes.selectors.ScanSelection;
 import io.github.mzmine.parameters.parametertypes.tolerances.MZTolerance;
+import io.github.mzmine.parameters.parametertypes.tolerances.RTTolerance;
+import io.github.mzmine.parameters.parametertypes.tolerances.RTTolerance.Unit;
 import io.github.mzmine.project.impl.MZmineProjectImpl;
 import io.github.mzmine.taskcontrol.TaskStatus;
 import java.io.BufferedReader;
@@ -76,11 +83,11 @@ import java.util.Objects;
 import org.junit.jupiter.api.Test;
 
 /**
- * End-to-end deterministic test for the first scientific portion of the open-offline pipeline.
+ * End-to-end deterministic test for the scientific open-offline pipeline.
  *
- * <p>The human-readable CSV profile is converted to mzML, imported, processed by the centroid mass
- * detector, connected into chromatograms by the MZmine 3.9 ADAP builder, and resolved by the local
- * minimum feature resolver. No login, network, vendor reader, or proprietary component is
+ * <p>Two human-readable synthetic profiles are converted to mzML, imported, processed by centroid
+ * mass detection, connected into chromatograms, resolved by local minimum, and aligned by the
+ * MZmine 3.9 join aligner. No login, network, vendor reader, R runtime, or proprietary component is
  * involved.</p>
  */
 class OpenOfflineSyntheticChromatogramPipelineTest {
@@ -92,44 +99,54 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
   private static final double[] MZ_VALUES = {75.0, 150.0, 300.0, 500.0};
 
   @Test
-  void importsDetectsBuildsAndResolvesTwoDeterministicFeatures() throws IOException {
+  void processesAndAlignsTwoDeterministicSamples() throws IOException {
     Locale.setDefault(Locale.US);
-    final Path mzml = Files.createTempFile("mzmine-open-offline-", ".mzML");
-    final List<ProfileScan> profile = loadProfile();
-    writeMzML(mzml, profile);
+    final Path mzmlA = Files.createTempFile("mzmine-open-offline-a-", ".mzML");
+    final Path mzmlB = Files.createTempFile("mzmine-open-offline-b-", ".mzML");
+
+    final List<ProfileScan> profileA = loadProfile();
+    final List<ProfileScan> profileB = shiftAndScaleProfile(profileA, 0.03, 1.10);
+    writeMzML(mzmlA, profileA);
+    writeMzML(mzmlB, profileB);
 
     final MZmineProject project = new MZmineProjectImpl();
     MZmineCore.getProjectManager().setCurrentProject(project);
 
     try {
-      final RawDataFile raw = importMzML(project, mzml.toFile());
-      assertEquals(15, raw.getNumOfScans());
-      assertEquals(15, raw.getNumOfScans(1));
+      final ResolvedSample sampleA = processSample(project, mzmlA.toFile(), 1.0,
+          0.6f, 9000.0f, 1.0f, 7000.0f);
+      final ResolvedSample sampleB = processSample(project, mzmlB.toFile(), 1.10,
+          0.63f, 9900.0f, 1.03f, 7700.0f);
 
-      runCentroidMassDetection(raw);
-      assertMassDetectionResult(raw);
-
-      final FeatureList chromatograms = runChromatogramBuilder(project, raw);
-      assertFeatureProperties(chromatograms);
-
-      final FeatureList resolved = runFeatureResolver(project, chromatograms);
-      assertFeatureProperties(resolved);
-      assertEquals(2, project.getNumberOfFeatureLists());
+      final FeatureList aligned = runJoinAlignment(project, sampleA.resolved(), sampleB.resolved());
+      assertAlignedResult(aligned, sampleA, sampleB);
     } finally {
-      // Replacing the project closes imported raw data and releases mapped resources.
       MZmineCore.getProjectManager().setCurrentProject(new MZmineProjectImpl());
-      try {
-        Files.deleteIfExists(mzml);
-      } catch (IOException lockedMappedFileOnWindows) {
-        // The legacy memory-mapped mzML reader may retain a Windows file lock until JVM shutdown.
-        // This fallback keeps the scientific assertions strict without turning cleanup into a
-        // platform-dependent test failure.
-        mzml.toFile().deleteOnExit();
-      }
+      deleteGeneratedMzML(mzmlA);
+      deleteGeneratedMzML(mzmlB);
     }
   }
 
+  private static ResolvedSample processSample(final MZmineProject project, final File fixture,
+      final double intensityScale, final float firstRt, final float firstHeight,
+      final float secondRt, final float secondHeight) {
+    final RawDataFile raw = importMzML(project, fixture);
+    assertEquals(15, raw.getNumOfScans());
+    assertEquals(15, raw.getNumOfScans(1));
+
+    runCentroidMassDetection(raw);
+    assertMassDetectionResult(raw, intensityScale);
+
+    final FeatureList chromatograms = runChromatogramBuilder(project, raw);
+    assertFeatureProperties(chromatograms, firstRt, firstHeight, secondRt, secondHeight);
+
+    final FeatureList resolved = runFeatureResolver(project, chromatograms);
+    assertFeatureProperties(resolved, firstRt, firstHeight, secondRt, secondHeight);
+    return new ResolvedSample(raw, resolved);
+  }
+
   private static RawDataFile importMzML(final MZmineProject project, final File fixture) {
+    final int before = project.getNumberOfDataFiles();
     final MSDKmzMLImportParameters parameters = new MSDKmzMLImportParameters();
     parameters.getParameter(MSDKmzMLImportParameters.fileNames).setValue(new File[]{fixture});
 
@@ -138,8 +155,8 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
     task.run();
 
     assertEquals(TaskStatus.FINISHED, task.getStatus(), task::getErrorMessage);
-    assertEquals(1, project.getNumberOfDataFiles());
-    return project.getDataFiles()[0];
+    assertEquals(before + 1, project.getNumberOfDataFiles());
+    return project.getDataFiles()[before];
   }
 
   private static void runCentroidMassDetection(final RawDataFile raw) {
@@ -164,7 +181,8 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
     assertEquals(1.0, task.getFinishedPercentage(), DOUBLE_TOLERANCE);
   }
 
-  private static void assertMassDetectionResult(final RawDataFile raw) {
+  private static void assertMassDetectionResult(final RawDataFile raw,
+      final double intensityScale) {
     for (final Scan scan : raw.getScans()) {
       assertNotNull(scan.getMassList(), "Mass list missing for scan " + scan.getScanNumber());
       final double[] masses = scan.getMassList()
@@ -185,13 +203,15 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
     assertArrayEquals(new double[]{150.0, 300.0, 500.0}, scanAtPointNine.getMassList()
         .getMzValues(new double[scanAtPointNine.getMassList().getNumberOfDataPoints()]),
         DOUBLE_TOLERANCE);
-    assertArrayEquals(new double[]{500.0, 4000.0, 150.0}, scanAtPointNine.getMassList()
-        .getIntensityValues(new double[scanAtPointNine.getMassList().getNumberOfDataPoints()]),
+    assertArrayEquals(new double[]{500.0 * intensityScale, 4000.0 * intensityScale, 150.0},
+        scanAtPointNine.getMassList()
+            .getIntensityValues(new double[scanAtPointNine.getMassList().getNumberOfDataPoints()]),
         DOUBLE_TOLERANCE);
   }
 
   private static FeatureList runChromatogramBuilder(final MZmineProject project,
       final RawDataFile raw) {
+    final int before = project.getNumberOfFeatureLists();
     final ADAPChromatogramBuilderParameters parameters =
         new ADAPChromatogramBuilderParameters();
     parameters.setParameter(ADAPChromatogramBuilderParameters.scanSelection,
@@ -210,12 +230,13 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
 
     assertEquals(TaskStatus.FINISHED, task.getStatus(), task::getErrorMessage);
     assertEquals(1.0, task.getFinishedPercentage(), DOUBLE_TOLERANCE);
-    assertEquals(1, project.getNumberOfFeatureLists());
-    return project.getCurrentFeatureLists().get(0);
+    assertEquals(before + 1, project.getNumberOfFeatureLists());
+    return project.getCurrentFeatureLists().get(before);
   }
 
   private static FeatureList runFeatureResolver(final MZmineProject project,
       final FeatureList chromatograms) {
+    final int before = project.getNumberOfFeatureLists();
     final MinimumSearchFeatureResolverParameters parameters =
         new MinimumSearchFeatureResolverParameters();
     parameters.setParameter(GeneralResolverParameters.SUFFIX, "resolved");
@@ -238,29 +259,91 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
 
     assertEquals(TaskStatus.FINISHED, task.getStatus(), task::getErrorMessage);
     assertEquals(1.0, task.getFinishedPercentage(), DOUBLE_TOLERANCE);
-    assertEquals(2, project.getNumberOfFeatureLists());
-    return project.getCurrentFeatureLists().get(1);
+    assertEquals(before + 1, project.getNumberOfFeatureLists());
+    return project.getCurrentFeatureLists().get(before);
   }
 
-  private static void assertFeatureProperties(final FeatureList featureList) {
+  private static FeatureList runJoinAlignment(final MZmineProject project,
+      final FeatureList first, final FeatureList second) {
+    final int before = project.getNumberOfFeatureLists();
+    final JoinAlignerParameters parameters = new JoinAlignerParameters();
+    parameters.setParameter(JoinAlignerParameters.peakLists,
+        new FeatureListsSelection((ModularFeatureList) first, (ModularFeatureList) second));
+    parameters.setParameter(JoinAlignerParameters.peakListName, "synthetic aligned");
+    parameters.setParameter(JoinAlignerParameters.MZTolerance, new MZTolerance(0.005, 10.0));
+    parameters.setParameter(JoinAlignerParameters.MZWeight, 3.0);
+    parameters.setParameter(JoinAlignerParameters.RTTolerance,
+        new RTTolerance(0.08f, Unit.MINUTES));
+    parameters.setParameter(JoinAlignerParameters.RTWeight, 1.0);
+    parameters.getParameter(JoinAlignerParameters.mobilityTolerance).setValue(false);
+    parameters.setParameter(JoinAlignerParameters.mobilityWeight, 0.0);
+    parameters.setParameter(JoinAlignerParameters.SameChargeRequired, false);
+    parameters.setParameter(JoinAlignerParameters.SameIDRequired, false);
+    parameters.getParameter(JoinAlignerParameters.compareIsotopePattern).setValue(false);
+    parameters.getParameter(JoinAlignerParameters.compareSpectraSimilarity).setValue(false);
+    parameters.setParameter(JoinAlignerParameters.handleOriginal, OriginalFeatureListOption.KEEP);
+
+    final JoinAlignerTask task = new JoinAlignerTask(project, parameters, null, MODULE_DATE);
+    task.run();
+
+    assertEquals(TaskStatus.FINISHED, task.getStatus(), task::getErrorMessage);
+    assertEquals(1.0, task.getFinishedPercentage(), DOUBLE_TOLERANCE);
+    assertEquals(before + 1, project.getNumberOfFeatureLists());
+    return project.getCurrentFeatureLists().get(before);
+  }
+
+  private static void assertFeatureProperties(final FeatureList featureList,
+      final float firstRt, final float firstHeight, final float secondRt,
+      final float secondHeight) {
     assertEquals(2, featureList.getNumberOfRows());
 
+    final List<FeatureListRow> rows = sortedRows(featureList);
+    assertSingleFeatureRow(rows.get(0), 150.0, firstRt, firstHeight);
+    assertSingleFeatureRow(rows.get(1), 300.0, secondRt, secondHeight);
+  }
+
+  private static void assertSingleFeatureRow(final FeatureListRow row, final double mz,
+      final float rt, final float height) {
+    assertEquals(1, row.getNumberOfFeatures());
+    assertEquals(mz, row.getAverageMZ(), DOUBLE_TOLERANCE);
+    assertEquals(rt, row.getAverageRT(), FLOAT_TOLERANCE);
+    assertEquals(height, row.getAverageHeight(), FLOAT_TOLERANCE);
+    assertNotNull(row.getAverageArea());
+    assertTrue(row.getAverageArea() > 0.0f);
+  }
+
+  private static void assertAlignedResult(final FeatureList aligned,
+      final ResolvedSample sampleA, final ResolvedSample sampleB) {
+    assertEquals(2, aligned.getNumberOfRows());
+    assertEquals(2, aligned.getNumberOfRawDataFiles());
+
+    final List<FeatureListRow> rows = sortedRows(aligned);
+    assertAlignedRow(rows.get(0), 150.0, sampleA.raw(), 0.6f, 9000.0f,
+        sampleB.raw(), 0.63f, 9900.0f);
+    assertAlignedRow(rows.get(1), 300.0, sampleA.raw(), 1.0f, 7000.0f,
+        sampleB.raw(), 1.03f, 7700.0f);
+  }
+
+  private static void assertAlignedRow(final FeatureListRow row, final double mz,
+      final RawDataFile rawA, final float rtA, final float heightA,
+      final RawDataFile rawB, final float rtB, final float heightB) {
+    assertEquals(2, row.getNumberOfFeatures());
+    assertEquals(mz, row.getAverageMZ(), DOUBLE_TOLERANCE);
+
+    final Feature featureA = row.getFeature(rawA);
+    final Feature featureB = row.getFeature(rawB);
+    assertNotNull(featureA);
+    assertNotNull(featureB);
+    assertEquals(rtA, featureA.getRT(), FLOAT_TOLERANCE);
+    assertEquals(heightA, featureA.getHeight(), FLOAT_TOLERANCE);
+    assertEquals(rtB, featureB.getRT(), FLOAT_TOLERANCE);
+    assertEquals(heightB, featureB.getHeight(), FLOAT_TOLERANCE);
+  }
+
+  private static List<FeatureListRow> sortedRows(final FeatureList featureList) {
     final List<FeatureListRow> rows = new ArrayList<>(featureList.getRows());
     rows.sort(Comparator.comparingDouble(FeatureListRow::getAverageMZ));
-
-    final FeatureListRow first = rows.get(0);
-    assertEquals(150.0, first.getAverageMZ(), DOUBLE_TOLERANCE);
-    assertEquals(0.6f, first.getAverageRT(), FLOAT_TOLERANCE);
-    assertEquals(9000.0f, first.getAverageHeight(), FLOAT_TOLERANCE);
-    assertNotNull(first.getAverageArea());
-    assertTrue(first.getAverageArea() > 0.0f);
-
-    final FeatureListRow second = rows.get(1);
-    assertEquals(300.0, second.getAverageMZ(), DOUBLE_TOLERANCE);
-    assertEquals(1.0f, second.getAverageRT(), FLOAT_TOLERANCE);
-    assertEquals(7000.0f, second.getAverageHeight(), FLOAT_TOLERANCE);
-    assertNotNull(second.getAverageArea());
-    assertTrue(second.getAverageArea() > 0.0f);
+    return rows;
   }
 
   private static boolean contains(final double[] values, final double target) {
@@ -281,6 +364,21 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
           .map(ProfileScan::parse).toList();
       assertEquals(15, rows.size());
       return rows;
+    }
+  }
+
+  private static List<ProfileScan> shiftAndScaleProfile(final List<ProfileScan> source,
+      final double rtShift, final double signalScale) {
+    return source.stream().map(row -> new ProfileScan(row.scan(), row.rtMinutes() + rtShift,
+        row.mz75Intensity(), row.mz150Intensity() * signalScale,
+        row.mz300Intensity() * signalScale, row.mz500Intensity())).toList();
+  }
+
+  private static void deleteGeneratedMzML(final Path mzml) {
+    try {
+      Files.deleteIfExists(mzml);
+    } catch (IOException lockedMappedFileOnWindows) {
+      mzml.toFile().deleteOnExit();
     }
   }
 
@@ -406,5 +504,8 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
     double[] intensities() {
       return new double[]{mz75Intensity, mz150Intensity, mz300Intensity, mz500Intensity};
     }
+  }
+
+  private record ResolvedSample(RawDataFile raw, FeatureList resolved) {
   }
 }
