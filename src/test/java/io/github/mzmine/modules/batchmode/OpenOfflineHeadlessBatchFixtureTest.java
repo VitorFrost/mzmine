@@ -34,9 +34,7 @@ import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution
 import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolverParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionParameters;
-import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetector;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.SelectedScanTypes;
-import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters;
 import io.github.mzmine.modules.impl.MZmineProcessingStepImpl;
 import io.github.mzmine.modules.io.export_features_csv_legacy.LegacyCSVExportModule;
@@ -108,6 +106,7 @@ class OpenOfflineHeadlessBatchFixtureTest {
     assertTrue(xml.contains(ModularADAPChromatogramBuilderModule.class.getName()));
     assertTrue(xml.contains(MinimumSearchFeatureResolverModule.class.getName()));
     assertTrue(xml.contains(LegacyCSVExportModule.class.getName()));
+    assertTrue(xml.contains("<parameter name=\"Noise level\">100.0</parameter>"));
     assertTrue(xml.contains(MZML_FILE.toFile().getAbsolutePath()));
     assertTrue(xml.contains(CSV_FILE.toFile().getAbsolutePath()));
     assertFalse(Files.exists(CSV_FILE), "Export must be produced only by the child CLI process");
@@ -121,18 +120,14 @@ class OpenOfflineHeadlessBatchFixtureTest {
   }
 
   private static ParameterSet massDetectionParameters() {
-    final CentroidMassDetectorParameters detectorParameters =
-        new CentroidMassDetectorParameters();
-    detectorParameters.setParameter(CentroidMassDetectorParameters.noiseLevel, 100.0);
-
     final MassDetectionParameters parameters = new MassDetectionParameters();
     parameters.setParameter(MassDetectionParameters.dataFiles,
         new RawDataFilesSelection(RawDataFilesSelectionType.BATCH_LAST_FILES));
     parameters.setParameter(MassDetectionParameters.scanSelection, new ScanSelection(1));
     parameters.setParameter(MassDetectionParameters.scanTypes, SelectedScanTypes.SCANS);
     parameters.setParameter(MassDetectionParameters.denormalizeMSnScans, false);
-    parameters.setParameter(MassDetectionParameters.massDetector,
-        new MZmineProcessingStepImpl<MassDetector>(new CentroidMassDetector(), detectorParameters));
+    parameters.getParameter(MassDetectionParameters.massDetector).getEmbeddedParameters()
+        .setParameter(CentroidMassDetectorParameters.noiseLevel, 100.0);
     parameters.getParameter(MassDetectionParameters.outFilenameOption).setValue(false);
     return parameters;
   }
