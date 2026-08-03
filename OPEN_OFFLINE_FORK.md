@@ -39,6 +39,24 @@ The independent build must not depend on these artifacts:
 6. Replace account-related UI and service calls with no-account local services where an interface is required.
 7. Add CI checks that reject imports and dependencies matching `io.mzio.users`, `AuthRequiredEvent`, and prohibited Maven coordinates.
 
+## Current status
+
+Completed on the initial branch:
+
+- independent branch created from the exact MZmine 3.9.0 commit;
+- source/JAR audit added for prohibited MZIO authentication and licensing components;
+- Java 20 CI added for Linux and Windows;
+- Google Analytics telemetry replaced with an inert compatibility facade;
+- automatic network update checks disabled;
+- draft pull request opened to expose and validate CI results without merging into `master`.
+
+Still pending validation:
+
+- successful Gradle dependency resolution and compilation;
+- GUI startup without network access;
+- headless batch execution;
+- mzML import and deterministic reference processing.
+
 ## First milestone
 
 A successful first milestone must:
