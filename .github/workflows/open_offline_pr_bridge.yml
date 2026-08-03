@@ -1,0 +1,70 @@
+name: Open Offline PR Bridge
+
+on:
+  pull_request:
+    branches:
+      - open-offline-main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independence-audit:
+    name: Verify no proprietary login dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Audit source, build files, and JARs
+        run: python scripts/verify_open_offline.py
+
+  compile-and-test:
+    name: Compile and test (${{ matrix.os }})
+    needs: independence-audit
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Java 20
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile and test on Linux
+        if: runner.os != 'Windows'
+        run: ./gradlew clean test classes --no-daemon --stacktrace
+
+      - name: Compile and test on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\gradlew.bat clean test classes --no-daemon --stacktrace
+
+      - name: Upload test reports after failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.os }}
+          path: |
+            build/reports/tests/
+            build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
