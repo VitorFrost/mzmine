@@ -39,6 +39,12 @@ The independent build must not depend on these artifacts:
 6. Replace account-related UI and service calls with no-account local services where an interface is required.
 7. Add CI checks that reject imports and dependencies matching `io.mzio.users`, `AuthRequiredEvent`, and prohibited Maven coordinates.
 
+## Branch strategy
+
+- `master` follows the modern upstream history and only contains the CI bridge required by GitHub.
+- `open-offline-main` is the stable integration branch for the independent offline fork.
+- `agent/open-offline-base` contains the current changes under validation.
+
 ## Current status
 
 Completed on the initial branch:
@@ -48,7 +54,8 @@ Completed on the initial branch:
 - Java 20 CI added for Linux and Windows;
 - Google Analytics telemetry replaced with an inert compatibility facade;
 - automatic network update checks disabled;
-- draft pull request opened to expose and validate CI results without merging into `master`.
+- draft pull request opened against `open-offline-main`;
+- CI bridge added to the repository default branch so GitHub can validate the independent branch.
 
 Still pending validation:
 
