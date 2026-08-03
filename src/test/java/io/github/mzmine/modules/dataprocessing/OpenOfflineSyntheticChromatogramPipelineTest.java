@@ -68,7 +68,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end deterministic test for the first scientific portion of the open-offline pipeline.
@@ -85,13 +84,10 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
   private static final String PROFILE_RESOURCE = "/open_offline/synthetic_lcms_profile.csv";
   private static final double[] MZ_VALUES = {75.0, 150.0, 300.0, 500.0};
 
-  @TempDir
-  Path tempDirectory;
-
   @Test
   void importsDetectsMassesAndBuildsTwoDeterministicChromatograms() throws IOException {
     Locale.setDefault(Locale.US);
-    final Path mzml = tempDirectory.resolve("synthetic_open_offline_lcms.mzML");
+    final Path mzml = Files.createTempFile("mzmine-open-offline-", ".mzML");
     final List<ProfileScan> profile = loadProfile();
     writeMzML(mzml, profile);
 
@@ -111,6 +107,14 @@ class OpenOfflineSyntheticChromatogramPipelineTest {
     } finally {
       // Replacing the project closes imported raw data and releases mapped resources.
       MZmineCore.getProjectManager().setCurrentProject(new MZmineProjectImpl());
+      try {
+        Files.deleteIfExists(mzml);
+      } catch (IOException lockedMappedFileOnWindows) {
+        // The legacy memory-mapped mzML reader may retain a Windows file lock until JVM shutdown.
+        // This fallback keeps the scientific assertions strict without turning cleanup into a
+        // platform-dependent test failure.
+        mzml.toFile().deleteOnExit();
+      }
     }
   }
 
