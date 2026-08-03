@@ -73,6 +73,9 @@ jobs:
       - name: Run headless startup smoke test
         run: python scripts/smoke_test_headless.py
 
+      - name: Run deterministic headless batch reference
+        run: python scripts/test_headless_batch.py
+
       - name: Upload test reports after failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -81,5 +84,6 @@ jobs:
           path: |
             build/reports/tests/
             build/test-results/
+            build/open_offline_headless/
           if-no-files-found: ignore
           retention-days: 7
