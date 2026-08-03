@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022 The MZmine Development Team
+ * Copyright (c) 2004-2024 The MZmine Development Team
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -18,35 +18,75 @@
  * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
  * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
  * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
- * OTHER DEALINGS IN THE SOFTWARE.
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  */
 
 package io.github.mzmine.taskcontrol;
 
 import io.github.mzmine.taskcontrol.impl.TaskQueue;
 import io.github.mzmine.taskcontrol.impl.WrappedTask;
+import java.util.Objects;
 
 /**
- * 
+ * Controls asynchronous and deterministic synchronous execution of MZmine tasks.
+ *
+ * <p>The synchronous API is a selective Java 20-compatible adaptation of the public MIT-licensed
+ * controller revision at commit {@code 001a0c3c672d09a141faa56b42c7c145246f9dd6}. The legacy
+ * MZmine 3.9 queue API is retained for compatibility.</p>
  */
 public interface TaskController {
 
-  public void addTask(Task task);
+  void addTask(Task task);
 
-  public WrappedTask[] addTasks(Task tasks[]);
+  WrappedTask[] addTasks(Task[] tasks);
 
-  public void addTask(Task task, TaskPriority priority);
+  void addTask(Task task, TaskPriority priority);
 
-  public WrappedTask[] addTasks(Task tasks[], TaskPriority[] priority);
+  WrappedTask[] addTasks(Task[] tasks, TaskPriority[] priority);
 
-  public void setTaskPriority(Task task, TaskPriority priority);
+  void setTaskPriority(Task task, TaskPriority priority);
 
-  public void addTaskControlListener(TaskControlListener listener);
+  void addTaskControlListener(TaskControlListener listener);
 
-  public TaskQueue getTaskQueue();
+  /**
+   * Legacy MZmine 3.9 queue accessor.
+   */
+  TaskQueue getTaskQueue();
 
-  public boolean isTaskInstanceRunningOrQueued(Class<? extends AbstractTask> clazz);
+  /**
+   * Clearer alias introduced by the public 2024 task-controller work.
+   *
+   * @return the same submitted-task queue returned by {@link #getTaskQueue()}
+   */
+  default TaskQueue getSubmittedTaskQueue() {
+    return getTaskQueue();
+  }
+
+  /**
+   * Add a task to the submitted-task view and execute it completely on the calling thread.
+   *
+   * @param task non-null task to execute
+   * @return wrapper containing the final task description, status, progress, and error message
+   */
+  WrappedTask runTaskOnThisThreadBlocking(Task task);
+
+  /**
+   * Execute tasks sequentially on the calling thread.
+   *
+   * <p>This small compatibility helper is intentionally deterministic and does not create an
+   * executor. Empty input returns an empty array.</p>
+   */
+  default WrappedTask[] runTasksOnThisThreadBlocking(Task... tasks) {
+    Objects.requireNonNull(tasks, "tasks");
+    final WrappedTask[] wrappedTasks = new WrappedTask[tasks.length];
+    for (int i = 0; i < tasks.length; i++) {
+      wrappedTasks[i] = runTaskOnThisThreadBlocking(tasks[i]);
+    }
+    return wrappedTasks;
+  }
+
+  boolean isTaskInstanceRunningOrQueued(Class<? extends AbstractTask> clazz);
 
 }
