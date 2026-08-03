@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Fail when proprietary MZIO authentication components enter the open fork.
+"""Verify that the independent fork stays free of proprietary login code.
 
-The check intentionally scans build/config/source files and JAR contents. Documentation
-and this script are not scanned as source, so they may describe forbidden components.
+The audit scans build/config/source files, bundled JAR contents, and selected startup
+classes that must never initiate outbound network access.
 """
 
 from __future__ import annotations
@@ -46,6 +46,22 @@ FORBIDDEN_PATTERNS = {
     "user login service": re.compile(r"\bUserLoginService\b"),
     "current-user service": re.compile(r"\bCurrentUserService\b"),
     "license utility": re.compile(r"\bLicenseUtils\b"),
+}
+
+STARTUP_NETWORK_FILES = (
+    Path("src/main/java/io/github/mzmine/main/MZmineCore.java"),
+    Path("src/main/java/io/github/mzmine/main/GoogleAnalyticsTracker.java"),
+    Path("src/main/java/io/github/mzmine/gui/NewVersionCheck.java"),
+)
+
+STARTUP_NETWORK_PATTERNS = {
+    "Java HTTP client": re.compile(r"\bHttp(?:Client|Request|Response)\b"),
+    "URL connection": re.compile(r"\b(?:HttpURLConnection|URLConnection)\b|\.openConnection\s*\("),
+    "direct URL construction": re.compile(r"\bnew\s+URL\s*\("),
+    "InetUtils download": re.compile(r"\bInetUtils\.retrieveData\b"),
+    "Google Analytics endpoint": re.compile(r"google-analytics\.com", re.IGNORECASE),
+    "automatic MZmine update endpoint": re.compile(r"mzmine\.github\.io/version", re.IGNORECASE),
+    "MZIO authentication endpoint": re.compile(r"auth\.mzio\.io", re.IGNORECASE),
 }
 
 
@@ -101,15 +117,42 @@ def scan_jars() -> list[str]:
     return findings
 
 
+def scan_startup_network_access() -> list[str]:
+    findings: list[str] = []
+    for relative_path in STARTUP_NETWORK_FILES:
+        path = ROOT / relative_path
+        if not path.is_file():
+            findings.append(f"Required startup policy file is missing: {relative_path}")
+            continue
+
+        text = path.read_text(encoding="utf-8")
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            for label, pattern in STARTUP_NETWORK_PATTERNS.items():
+                if pattern.search(line):
+                    findings.append(
+                        f"{relative_path}:{line_number}: forbidden startup network access ({label}): "
+                        f"{line.strip()}"
+                    )
+    return findings
+
+
 def main() -> int:
-    findings = scan_paths() + scan_text_files() + scan_jars()
+    findings = (
+        scan_paths()
+        + scan_text_files()
+        + scan_jars()
+        + scan_startup_network_access()
+    )
     if findings:
         print("Open-offline audit FAILED:\n")
         for finding in findings:
             print(f" - {finding}")
         return 1
 
-    print("Open-offline audit passed: no MZIO authentication/licensing components found.")
+    print(
+        "Open-offline audit passed: no MZIO authentication/licensing components or "
+        "startup network access found."
+    )
     return 0
 
 
