@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "generated_for": "MZmine Open Offline public blank and replicate validation",
+  "default_output_directory": "build/public_validation_data",
+  "policy": {
+    "require_verified_reuse_terms": true,
+    "require_expected_size": true,
+    "require_sha256": true,
+    "allow_unverified_downloads": false,
+    "commit_large_test_data": false
+  },
+  "datasets": [
+    {
+      "id": "zenodo-14001110-banane-30ngml-002",
+      "tier": 3,
+      "status": "frozen",
+      "download_enabled": true,
+      "purpose": "Second public technical replicate for deterministic alignment and replicate-agreement validation",
+      "source": {
+        "type": "zenodo",
+        "record_id": "14001110",
+        "path": "Banane_30ngmL_002.mzML",
+        "page_url": "https://zenodo.org/records/14001110",
+        "api_url": "https://zenodo.org/api/records/14001110",
+        "download_url": "https://zenodo.org/api/records/14001110/files/Banane_30ngmL_002.mzML/content"
+      },
+      "license": {
+        "status": "verified",
+        "identifier": "cc-by-4.0",
+        "evidence_url": "https://zenodo.org/records/14001110",
+        "note": "Zenodo record metadata reports Creative Commons Attribution 4.0 International. Attribution to Markus Aigensberger and the Zenodo record is required."
+      },
+      "files": [
+        {
+          "relative_path": "zenodo/14001110/Banane_30ngmL_002.mzML",
+          "download_url": "https://zenodo.org/api/records/14001110/files/Banane_30ngmL_002.mzML/content",
+          "expected_size_bytes": 86540418,
+          "repository_md5": "93140cfe8da68877d9945c841250a5e6",
+          "sha256": "350292e2497d9df1c1139f67dba27f333331c1ff6902e25b36d5fcba8c713214"
+        }
+      ],
+      "instrument": "Pending deterministic mzML metadata inspection",
+      "polarity": "Pending deterministic mzML metadata inspection",
+      "acquisition": "Untargeted LC-MS technical replicate; exact scan semantics pending import report",
+      "expected_assertions": [
+        "file size and SHA-256 match the frozen manifest",
+        "import completes without login or network access after download",
+        "scan count, RT range, MS levels, polarity, m/z range and data-point counts are deterministic",
+        "acquisition metadata are compatible with replicate 1",
+        "later feature-processing results support replicate-agreement calculations"
+      ]
+    },
+    {
+      "id": "zenodo-14001110-blank-001",
+      "tier": 3,
+      "status": "frozen",
+      "download_enabled": true,
+      "purpose": "Public analytical blank for deterministic blank/sample and filtering validation",
+      "source": {
+        "type": "zenodo",
+        "record_id": "14001110",
+        "path": "blank_001.mzML",
+        "page_url": "https://zenodo.org/records/14001110",
+        "api_url": "https://zenodo.org/api/records/14001110",
+        "download_url": "https://zenodo.org/api/records/14001110/files/blank_001.mzML/content"
+      },
+      "license": {
+        "status": "verified",
+        "identifier": "cc-by-4.0",
+        "evidence_url": "https://zenodo.org/records/14001110",
+        "note": "Zenodo record metadata reports Creative Commons Attribution 4.0 International. Attribution to Markus Aigensberger and the Zenodo record is required."
+      },
+      "files": [
+        {
+          "relative_path": "zenodo/14001110/blank_001.mzML",
+          "download_url": "https://zenodo.org/api/records/14001110/files/blank_001.mzML/content",
+          "expected_size_bytes": 86111130,
+          "repository_md5": "d322d4a5744a6caac63cce5744e71b45",
+          "sha256": "3bd67cbe55e6e1d7dbe5073985a263621045eb5f51a4809070e1ae0019764aab"
+        }
+      ],
+      "instrument": "Pending deterministic mzML metadata inspection",
+      "polarity": "Pending deterministic mzML metadata inspection",
+      "acquisition": "Untargeted LC-MS analytical blank; exact scan semantics pending import report",
+      "expected_assertions": [
+        "file size and SHA-256 match the frozen manifest",
+        "import completes without login or network access after download",
+        "scan count, RT range, MS levels, polarity, m/z range and data-point counts are deterministic",
+        "acquisition metadata are compatible with the sample runs",
+        "later processing distinguishes published rows-filter behavior from E&L-specific blank classification"
+      ]
+    }
+  ]
+}
