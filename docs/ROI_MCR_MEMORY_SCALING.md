@@ -1,6 +1,6 @@
 # ROI-MCR full-range memory scaling
 
-Status: bounded primitive builder implemented and under public-data validation.
+Status: **bounded primitive builder validated on the frozen public sample/blank pair in Ubuntu and Windows; not yet production-active**.
 
 ## Incident
 
@@ -24,8 +24,8 @@ The prototype stores every ROI point in three boxed lists:
 - `List<Double>` m/z values;
 - `List<Double>` intensities.
 
-This representation is acceptable for short selected regions but multiplies memory overhead when a
-full LC-MS run contains millions of accepted centroid points.
+This representation remains acceptable for short selected regions but multiplies memory overhead
+when a full LC-MS run contains millions of accepted centroid points.
 
 ## Corrective design
 
@@ -42,7 +42,7 @@ double[] intensities
 ```
 
 Only the occupied prefix is copied when the ROI is finalized. Consecutive-scan persistence is
-updated incrementally, avoiding a second full traversal of boxed scan values.
+updated incrementally, avoiding a second traversal of boxed scan values.
 
 ### Primitive scan-point ordering
 
@@ -65,9 +65,39 @@ Rationale:
 - persistence rewards coherent chromatographic evidence;
 - square-root persistence prevents broad background traces from dominating linearly by duration.
 
-The first public characterization uses a visible limit of 8,000 retained ROIs. This is not presented
-as a universal analytical optimum. It is a safety boundary to measure the real candidate pressure
-before selecting a production default.
+The first public characterization used a visible limit of 8,000 retained ROIs. This is a safety
+boundary, not a universal analytical optimum.
+
+## Public full-range result
+
+Frozen pair:
+
+- sample: `Banane_30ngmL_002.mzML`;
+- blank: `blank_001.mzML`.
+
+| Metric | Sample | Blank |
+|---|---:|---:|
+| Input centroid points | 6,332,682 | 6,365,258 |
+| Points above ROI noise | 3,523,379 | 3,583,060 |
+| ROIs started | 135,085 | 129,001 |
+| Valid completed ROIs | 6,203 | 4,446 |
+| Retained ROIs | 6,203 | 4,446 |
+| Discarded by limit | 0 | 0 |
+| Maximum active ROIs | 1,047 | 984 |
+| Maximum points in one ROI | 4,042 | 3,983 |
+
+The retention boundary did not alter this public pair because all valid completed ROIs fit below the
+8,000-ROI limit.
+
+### Runtime
+
+| Platform | Sample | Blank |
+|---|---:|---:|
+| Ubuntu | 4.063 s | 3.854 s |
+| Windows | 5.631 s | 5.490 s |
+
+The scientific JSON output was identical across operating systems after excluding paths and elapsed
+times.
 
 ## Audit statistics
 
@@ -76,21 +106,15 @@ Every full-range characterization records:
 - total input centroid points;
 - points above ROI noise;
 - ROIs started;
-- ROIs completing all scientific persistence/height criteria;
+- ROIs completing all persistence/height criteria;
 - ROIs retained;
 - ROIs discarded by the retention limit;
 - maximum simultaneously active ROIs;
 - maximum number of points in one ROI;
 - elapsed time for sample and blank.
 
-A retention limit is therefore never silent. If valid candidates exceed the boundary, the report
-will show the truncation explicitly and the production integration remains blocked.
-
-## Diagnostic-first public test
-
-The public test writes its JSON report before scientific assertions. Segmentation failures such as
-no windows, low coverage, excessive fragmentation, under-supported windows, or truncation pressure
-remain inspectable in CI artifacts instead of being lost behind a failed assertion.
+A retention limit is therefore never silent. If valid candidates exceed the boundary in another
+dataset, the report exposes that truncation and production integration remains blocked.
 
 ## Tests
 
@@ -100,13 +124,16 @@ remain inspectable in CI artifacts instead of being lost behind a failed asserti
 2. deterministic retention of the strongest persistent ROIs when the limit is reached;
 3. storage of a 10,000-point ROI without boxed point lists.
 
+The standard CI, headless startup, deterministic batch regression, MZmine 3.9.0 comparison, and
+dedicated public mzML jobs passed on Ubuntu and Windows.
+
 ## Migration boundary
 
 The existing production task continues using the previously validated prototype builder for short
 selected ranges. Migration to the bounded builder requires:
 
-1. unit-test equivalence;
-2. successful full-range public characterization on Ubuntu and Windows;
-3. reproducible retained/discarded counts;
-4. acceptable window count and scan coverage;
-5. explicit production parameters and provenance for the retention boundary.
+1. an explicit production parameter for the retention boundary;
+2. provenance reporting whenever completed candidates exceed that boundary;
+3. public local-window MCR fitting and reconciliation;
+4. acceptable memory and runtime when the largest public windows contain more than 1,400 ROIs;
+5. deterministic output on Ubuntu and Windows.
