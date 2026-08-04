@@ -1,206 +1,195 @@
-# Stub Implementation Guide
+# Open replacement interface guide
 
-This document details how to implement the open-source stub classes that replace the closed `io.mzio` binary JARs in the open-offline fork.
+## Purpose
 
-Each stub corresponds to a prohibited Maven artifact listed in `OPEN_OFFLINE_FORK.md`.
+This document replaces the earlier “stub implementation” guidance.
 
----
+The open-offline fork does **not** recreate proprietary `io.mzio` services through fake users,
+“always authenticated” responses, unconditional feature grants, or drop-in API emulation. Those
+patterns would blur the independence boundary and could amount to an authentication or entitlement
+bypass rather than an open scientific implementation.
 
-## 1. `io.mzio:user-client` → `UserService` stub
+When later public source refers to an unavailable proprietary service, contributors must first decide
+whether the dependency is scientifically necessary.
 
-**Prohibited artifact:** `local-repo/io/mzio/user-client/1.0.0/user-client-1.0.0.jar`
+## Allowed decisions
 
-This JAR handles authentication against the mzio cloud backend. In the offline fork it is replaced by a local stub that always returns a fully-authorized anonymous user.
+### 1. Remove or omit the integration
 
-### Interface to implement
+Use this when the dependency serves:
 
-Create the stub at:
-`src/main/java/io/github/mzmine/users/offline/OfflineUserService.java`
+- account/login UI;
+- remote profile management;
+- license or entitlement checks;
+- telemetry or update services;
+- cloud-only workflow integration;
+- functionality outside the declared LC-MS core scope.
 
-```java
-/*
- * Copyright (c) 2004-2024 The mzmine Development Team
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use,
- * copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software...
- *
- * (MIT License — full text at LICENSE.txt)
- */
-package io.github.mzmine.users.offline;
+The scientific workflow should call its local implementation directly rather than pass through a fake
+account or entitlement layer.
 
-/**
- * Offline stub for io.mzio:user-client.
- * Always returns a locally-authenticated user. Never contacts any server.
- * Drop-in replacement for any call site that previously called
- * CurrentUserService.getUser() or similar io.mzio APIs.
- */
-public final class OfflineUserService {
+### 2. Define an original local open interface
 
-  private static final OfflineUser LOCAL_USER = new OfflineUser("local", "Local User");
+Use this only when the scientific or infrastructure workflow needs a legitimate local abstraction.
+The interface must:
 
-  private OfflineUserService() {}
+- have independently documented behavior;
+- model the local function actually required by the fork;
+- avoid user/authentication/license terminology when those concepts are not needed;
+- fail explicitly for unsupported operations;
+- make no mandatory network calls;
+- have unit and headless tests;
+- be described as fork-local unless compatibility is separately demonstrated.
 
-  /** Always returns the local offline user. Never null. */
-  public static OfflineUser getUser() {
-    return LOCAL_USER;
-  }
+Examples already present in the fork:
 
-  /** Always returns true — the offline user is always authenticated. */
-  public static boolean isAuthenticated() {
-    return true;
-  }
+- `TaskService` — local access to the open task controller;
+- JavaFX/Desktop task refresh at the view boundary rather than inside scheduling code;
+- the original fork-local `GroupedTask` for bounded child-task execution.
 
-  /** No-op. There is no remote session to log into. */
-  public static void login() {
-    // intentionally empty — offline mode
-  }
+These are not binary-compatible replacements for proprietary services.
 
-  /** No-op. There is no remote session to log out of. */
-  public static void logout() {
-    // intentionally empty — offline mode
-  }
-}
-```
+### 3. Classify the capability as out of scope
 
-### OfflineUser record
+Use this when:
+
+- behavior cannot be independently specified;
+- required code is proprietary or unavailable;
+- distribution rights are unclear;
+- a vendor SDK cannot be redistributed;
+- the capability is not required by the declared scientific target.
+
+The limitation must be visible in documentation and the parity matrix.
+
+## Prohibited patterns
+
+Do not implement:
 
 ```java
-package io.github.mzmine.users.offline;
-
-/**
- * Immutable local user representation. Replaces the io.mzio User/Account model.
- */
-public record OfflineUser(String username, String displayName) {
-  public boolean hasFeature(String featureKey) {
-    // Offline fork grants all features unconditionally.
-    return true;
-  }
+boolean isAuthenticated() {
+  return true;
 }
 ```
 
----
+Do not create a fake local user that grants every feature.
 
-## 2. `io.mzio:user-management-fx` → UI stub
+Do not call a callback named `onLoginSuccess` merely to skip an account gate.
 
-**Prohibited artifact:** `local-repo/io/mzio/user-management-fx/`
+Do not reproduce proprietary package/class signatures solely to satisfy later binaries or source that
+was not independently available under a compatible license.
 
-This module provided the JavaFX login dialog. Replace with a no-op UI component that skips the login screen entirely.
+Do not infer proprietary behavior through decompilation, binary probing, or error-driven API cloning.
 
-Create at: `src/main/java/io/github/mzmine/users/offline/OfflineLoginController.java`
+Do not preserve a feature-gating architecture by making all gates return success. Remove the unrelated
+gate from the open scientific path or define a new local capability interface with independent
+semantics.
 
-```java
-package io.github.mzmine.users.offline;
+## Decision process
 
-/**
- * Stub for io.mzio:user-management-fx login controller.
- * Immediately signals successful login without showing any dialog.
- */
-public final class OfflineLoginController {
+For each unavailable dependency:
 
-  /** Called by the application startup. Skip login, proceed directly. */
-  public static void showLoginOrProceed(Runnable onSuccess) {
-    // Offline fork: no login required — proceed immediately.
-    onSuccess.run();
-  }
-}
+1. identify every call site;
+2. classify each call as scientific, local infrastructure, GUI convenience, remote integration, or
+   account/license behavior;
+3. remove account/license/remote-only call sites from the local scientific path;
+4. define the minimum local behavior still required;
+5. search public source history for a compatible MIT implementation;
+6. when no suitable public implementation exists, write a short original design record;
+7. add focused tests;
+8. run the independence audit and scientific regressions;
+9. record the result as Adapted, Not implemented, or Out of scope.
+
+## Local event behavior
+
+A local in-process event bus may be implemented only if a fork workflow genuinely needs event
+publication/subscription. It should not be described as a replacement for a proprietary global-event
+service unless protocol compatibility is established from public specifications.
+
+Required design questions:
+
+- Which local event types are needed?
+- Are handlers synchronous or asynchronous?
+- What is the ordering policy?
+- How are handler exceptions propagated?
+- How are subscriptions removed?
+- Is JavaFX-thread marshalling a publisher or view responsibility?
+- How is headless behavior tested?
+
+Do not add a generic event bus preemptively.
+
+## Memory management
+
+The fork retains the public MIT memory-mapping implementation from the 3.9 source line. The correct
+strategy is not to emulate a proprietary memory-management API. Instead:
+
+- use the open `MemoryMapStorage` and related public data model directly;
+- add lifecycle tests for close, cleanup, failure, cancellation, and repeated batches;
+- implement new local interfaces only where the scientific workflow requires a stable abstraction;
+- classify differences from v4.0.8 as Adapted unless direct parity is demonstrated.
+
+Memory lifecycle and cleanup remain active release gates.
+
+## Task controller
+
+The task-controller milestone is complete through open local code:
+
+- local `TaskService`;
+- synchronous task adapters;
+- Java 20 bounded executors;
+- JavaFX/Desktop decoupling;
+- fork-local `GroupedTask`.
+
+Do not attempt to recreate proprietary task-controller artifacts or package signatures. See
+[`TASKCONTROLLER_PORTING_PLAN.md`](../TASKCONTROLLER_PORTING_PLAN.md) and the Phase 2D design record.
+
+## Dependency exclusion
+
+The prohibited Maven coordinates must remain absent from source and resolved dependencies:
+
+```text
+io.mzio:user-client
+io.mzio:user-management
+io.mzio:user-management-fx
+io.mzio:global-events
+io.mzio:memory-management
+io.mzio:mzmine-core
+io.mzio:taskcontroller
 ```
 
----
+The repository audit should check:
 
-## 3. `io.mzio:global-events` → GlobalEventsStub
+- build files and dependency reports;
+- source imports and string references;
+- committed JARs and archives;
+- generated package contents where applicable.
 
-**Prohibited artifact:** `local-repo/io/mzio/global-events/`
+A literal documentation reference to a prohibited artifact may be allowed by the audit only when it is
+clearly part of the denylist or provenance documentation, not an executable dependency.
 
-This module provided a publish/subscribe event bus integrated with the mzio backend. Replace with a simple in-process bus.
+## Design record template
 
-```java
-package io.github.mzmine.events;
+Before implementing a new local interface, document:
 
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
-
-/**
- * Offline stub for io.mzio:global-events.
- * Pure in-process event bus — no network, no external serialization.
- */
-public final class LocalEventBus {
-
-  private static final Map<Class<?>, Set<Consumer<Object>>> subscribers =
-      new ConcurrentHashMap<>();
-
-  private LocalEventBus() {}
-
-  @SuppressWarnings("unchecked")
-  public static <T> void subscribe(Class<T> eventType, Consumer<T> handler) {
-    subscribers
-        .computeIfAbsent(eventType, k -> ConcurrentHashMap.newKeySet())
-        .add((Consumer<Object>) handler);
-  }
-
-  public static <T> void publish(T event) {
-    Set<Consumer<Object>> handlers = subscribers.get(event.getClass());
-    if (handlers != null) {
-      handlers.forEach(h -> h.accept(event));
-    }
-  }
-}
-```
-
----
-
-## 4. `io.mzio:memory-management` → MemoryMapStorage delegation
-
-**Strategy:** The MIT-licensed `MemoryMapStorage` class from mzmine 3.9.0 already implements all required memory mapping functionality. Simply ensure the `build.gradle` does **not** declare `io.mzio:memory-management` as a dependency, and that all import sites reference `io.github.mzmine.datamodel.impl.MemoryMapStorage` directly.
-
----
-
-## Gradle dependency exclusion
-
-In `build.gradle`, ensure these dependencies are **absent**:
-
-```groovy
-// These MUST NOT appear in any dependency block:
-// implementation 'io.mzio:user-client:*'
-// implementation 'io.mzio:user-management:*'
-// implementation 'io.mzio:user-management-fx:*'
-// implementation 'io.mzio:global-events:*'
-// implementation 'io.mzio:memory-management:*'
-// implementation 'io.mzio:mzmine-core:*'
-// implementation 'io.mzio:taskcontroller:*'
-```
-
-To guard against accidental re-introduction, add a Gradle build check:
-
-```groovy
-configurations.all {
-  resolutionStrategy {
-    eachDependency { details ->
-      if (details.requested.group == 'io.mzio') {
-        throw new GradleException(
-          "Prohibited dependency: ${details.requested.group}:${details.requested.name}. "
-          + "This is the open-offline fork — all io.mzio artifacts are forbidden."
-        )
-      }
-    }
-  }
-}
-```
-
----
+| Field | Required content |
+|---|---|
+| Problem | Local scientific/infrastructure need |
+| Why omission is insufficient | Concrete workflow requirement |
+| Public source search | Tags/commits/specifications reviewed |
+| Independence statement | No proprietary binary/decompilation/auth bypass |
+| API boundary | Classes and methods owned by the fork |
+| Semantics | Success, error, cancellation, concurrency, ordering |
+| Non-goals | Features intentionally excluded |
+| Tests | Unit, headless, cross-platform, scientific regression |
+| Parity classification | Adapted / Not implemented / Out of scope |
 
 ## Verification checklist
 
-After implementing stubs:
-
-- [ ] `git grep -rn "io.mzio"` returns no results in `src/`
-- [ ] `./gradlew dependencies | grep io.mzio` returns no results
-- [ ] Application starts without network connection
-- [ ] No login dialog appears at startup
-- [ ] All mass spectrometry modules function normally
-- [ ] Headless batch mode runs without user token
+- [ ] no prohibited executable dependency or bundled JAR;
+- [ ] no fake authenticated user or unconditional entitlement;
+- [ ] no account/license gate remains in the local scientific path;
+- [ ] fork-local behavior is independently documented;
+- [ ] unsupported behavior fails explicitly;
+- [ ] headless operation requires no account or mandatory network access;
+- [ ] Linux and Windows tests pass;
+- [ ] untouched 3.9 scientific regression remains valid;
+- [ ] parity documentation records the adaptation or scope decision.
