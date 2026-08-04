@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/VitorFrost/mzmine/datasets/parity/differential_stage_report.schema.json",
+  "title": "Normalized MZmine differential stage report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "producer",
+    "input",
+    "settings",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "ref",
+        "commit",
+        "application_version",
+        "java_version",
+        "operating_system",
+        "thread_count",
+        "command"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "application_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "java_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operating_system": {
+          "type": "string",
+          "minLength": 1
+        },
+        "thread_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "relative_path",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapping_id",
+        "sha256"
+      ],
+      "properties": {
+        "mapping_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "import": {
+          "$ref": "#/$defs/stage"
+        },
+        "mass_detection": {
+          "$ref": "#/$defs/stage"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_key",
+        "records",
+        "summary"
+      ],
+      "properties": {
+        "record_key": {
+          "const": "scan_key"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "summary": {
+          "type": "object"
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "scan_key",
+        "scan_number",
+        "ms_level",
+        "point_count"
+      ],
+      "properties": {
+        "scan_key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scan_number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ms_level": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "polarity": {
+          "enum": [
+            "POSITIVE",
+            "NEGATIVE",
+            "UNKNOWN"
+          ]
+        },
+        "spectrum_type": {
+          "enum": [
+            "CENTROIDED",
+            "PROFILE",
+            "THRESHOLDED",
+            "UNKNOWN"
+          ]
+        },
+        "point_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retention_time_minutes": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mz_min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mz_max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "intensity_sum": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sampled_points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "index",
+              "mz",
+              "intensity"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "mz": {
+                "type": "number"
+              },
+              "intensity": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "precursor": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
