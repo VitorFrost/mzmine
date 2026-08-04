@@ -47,10 +47,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -66,7 +62,6 @@ class RoiMcrPublicMzmlValidationTest {
       .toAbsolutePath();
   private static final Path REPORT_FILE = OUTPUT_DIRECTORY.resolve(
       "roi_mcr_public_validation.json");
-  private static final Pattern COMPONENT_PATTERN = Pattern.compile("component=(\\d+)");
   private static final ObjectMapper MAPPER = new ObjectMapper()
       .enable(SerializationFeature.INDENT_OUTPUT)
       .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
@@ -82,11 +77,13 @@ class RoiMcrPublicMzmlValidationTest {
     MZmineCore.getProjectManager().setCurrentProject(project);
 
     final Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 1);
-    report.put("method", "Direct public mzML import -> auto mass detection -> adaptive TIC window -> ROI-MCR");
+    report.put("schema_version", 2);
+    report.put("method",
+        "Direct public mzML import -> auto mass detection -> adaptive TIC window -> ROI-MCR -> perturbation robustness");
     report.put("sample_path", samplePath.toString());
     report.put("blank_path", blankPath.toString());
-    report.put("dataset_policy", "Bytes downloaded and SHA-verified from frozen public manifests by CI");
+    report.put("dataset_policy",
+        "Bytes downloaded and SHA-verified from frozen public manifests by CI");
 
     final long importStarted = System.nanoTime();
     importMzml(project, samplePath, blankPath);
@@ -141,14 +138,19 @@ class RoiMcrPublicMzmlValidationTest {
 
     assertEquals(TaskStatus.FINISHED, sampleExecution.status(), sampleExecution.errorMessage());
     assertNotNull(sampleExecution.featureList());
-    assertTrue(sampleExecution.featureList().getNumberOfRows() > 0,
-        "Public sample did not produce ROI-MCR features");
+    assertTrue(sampleExecution.rows() > 0, "Public sample did not produce ROI-MCR features");
+    assertValidProvenance("sample", sampleExecution.provenance());
 
     final long blankStarted = System.nanoTime();
     final RoiExecution blankExecution = runRoiMcr(project, blank, selection, roiNoise,
         seedIntensity, "public-blank-roi-mcr");
     report.put("blank_roi_mcr_elapsed_seconds", elapsedSeconds(blankStarted));
     report.put("blank", blankExecution.toMap());
+
+    assertEquals(TaskStatus.FINISHED, blankExecution.status(), blankExecution.errorMessage());
+    assertNotNull(blankExecution.featureList());
+    assertTrue(blankExecution.rows() > 0, "Public blank did not produce ROI-MCR features");
+    assertValidProvenance("blank", blankExecution.provenance());
 
     final Comparison comparison = compare(sampleExecution.featureList(),
         blankExecution.featureList(), 0.02, 0.12f);
@@ -157,10 +159,32 @@ class RoiMcrPublicMzmlValidationTest {
     MAPPER.writeValue(REPORT_FILE.toFile(), report);
 
     assertTrue(Files.isRegularFile(REPORT_FILE));
-    assertTrue(Files.size(REPORT_FILE) > 500);
+    assertTrue(Files.size(REPORT_FILE) > 1_000);
     assertFalse(comparison.sampleRows() == 0);
     System.out.println("ROI_MCR_PUBLIC_VALIDATION_REPORT=" + REPORT_FILE);
     System.out.println(MAPPER.writeValueAsString(report));
+  }
+
+  private static void assertValidProvenance(String label, RoiMcrProvenance.Summary provenance) {
+    assertTrue(provenance.componentCount() > 0, label + " has no parsed ROI-MCR components");
+    final int classified = provenance.confidenceCounts().values().stream()
+        .mapToInt(Integer::intValue).sum();
+    assertEquals(provenance.componentCount(), classified,
+        label + " confidence counts do not match unique component count");
+    assertTrue(provenance.minimumPerturbationVariants() >= 2,
+        label + " did not execute enough perturbation variants");
+    assertTrue(provenance.maximumPerturbationVariants()
+            >= provenance.minimumPerturbationVariants(),
+        label + " has inconsistent perturbation variant counts");
+    assertTrue(provenance.meanRestartStability() >= 0
+            && provenance.meanRestartStability() <= 1,
+        label + " restart stability is outside [0,1]");
+    assertTrue(provenance.meanPerturbationStability() >= 0
+            && provenance.meanPerturbationStability() <= 1,
+        label + " perturbation stability is outside [0,1]");
+    assertTrue(provenance.meanPerturbationSupport() >= 0
+            && provenance.meanPerturbationSupport() <= 1,
+        label + " perturbation support is outside [0,1]");
   }
 
   private static void importMzml(MZmineProject project, Path sample, Path blank) {
@@ -234,11 +258,11 @@ class RoiMcrPublicMzmlValidationTest {
   }
 
   private static RoiExecution summarize(TaskStatus status, String error, FeatureList list) {
+    final RoiMcrProvenance.Summary provenance = RoiMcrProvenance.summarize(list);
     if (list == null) {
-      return new RoiExecution(status, error, null, 0, Set.of(), null, null, null, null, 0d,
+      return new RoiExecution(status, error, null, 0, provenance, null, null, null, null, 0d,
           0d);
     }
-    final Set<Integer> components = new TreeSet<>();
     Double minMz = null;
     Double maxMz = null;
     Float minRt = null;
@@ -254,12 +278,8 @@ class RoiMcrPublicMzmlValidationTest {
       maxRt = maxRt == null ? rt : Math.max(maxRt, rt);
       maximumHeight = Math.max(maximumHeight, row.getAverageHeight());
       summedArea += row.getAverageArea();
-      final Matcher matcher = COMPONENT_PATTERN.matcher(String.valueOf(row.getComment()));
-      if (matcher.find()) {
-        components.add(Integer.parseInt(matcher.group(1)));
-      }
     }
-    return new RoiExecution(status, error, list, list.getNumberOfRows(), components, minMz, maxMz,
+    return new RoiExecution(status, error, list, list.getNumberOfRows(), provenance, minMz, maxMz,
         minRt, maxRt, maximumHeight, summedArea);
   }
 
@@ -382,7 +402,7 @@ class RoiMcrPublicMzmlValidationTest {
   }
 
   private record RoiExecution(TaskStatus status, String errorMessage, FeatureList featureList,
-                              int rows, Set<Integer> components, Double minimumMz,
+                              int rows, RoiMcrProvenance.Summary provenance, Double minimumMz,
                               Double maximumMz, Float minimumRt, Float maximumRt,
                               double maximumHeight, double summedArea) {
 
@@ -392,7 +412,7 @@ class RoiMcrPublicMzmlValidationTest {
       map.put("error_message", errorMessage);
       map.put("feature_list", featureList == null ? null : featureList.getName());
       map.put("rows", rows);
-      map.put("components", components);
+      map.put("provenance", provenance.toMap());
       map.put("minimum_mz", minimumMz);
       map.put("maximum_mz", maximumMz);
       map.put("minimum_rt", minimumRt);
