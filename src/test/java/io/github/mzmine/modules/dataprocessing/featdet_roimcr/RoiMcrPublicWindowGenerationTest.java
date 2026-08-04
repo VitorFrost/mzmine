@@ -15,6 +15,7 @@ import io.github.mzmine.datamodel.MZmineProject;
 import io.github.mzmine.datamodel.PolarityType;
 import io.github.mzmine.datamodel.RawDataFile;
 import io.github.mzmine.datamodel.Scan;
+import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.modules.MZmineProcessingModule;
 import io.github.mzmine.modules.MZmineProcessingStep;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule;
@@ -65,6 +66,7 @@ class RoiMcrPublicWindowGenerationTest {
     Files.deleteIfExists(REPORT);
 
     final MZmineProject project = new MZmineProjectImpl();
+    MZmineCore.getProjectManager().setCurrentProject(project);
     importMzml(project, samplePath, blankPath);
     final RawDataFile sample = findRaw(project, samplePath.getFileName().toString());
     final RawDataFile blank = findRaw(project, blankPath.getFileName().toString());
