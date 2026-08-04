@@ -78,9 +78,13 @@ class WorkerThread extends Thread {
       ensureErrorState(actualTask, finalErrorMessage);
       logger.log(Level.SEVERE, finalErrorMessage, throwable);
     } finally {
-      // Preserve explicit diagnostics even for Task implementations that do not extend AbstractTask.
-      wrappedTask.removeTaskReference(finalStatus, finalErrorMessage);
-      finished = true;
+      try {
+        // Preserve explicit diagnostics even for Task implementations that do not extend
+        // AbstractTask.
+        wrappedTask.removeTaskReference(finalStatus, finalErrorMessage);
+      } finally {
+        finished = true;
+      }
     }
   }
 
