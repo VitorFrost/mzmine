@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "dataset_id": "zenodo-14000687-mzmine-processing-settings",
+  "source_size_bytes": 17443,
+  "source_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c",
+  "xml_root_tag": "batch",
+  "mzmine_version": "3.4.27",
+  "element_count": 246,
+  "parameter_element_count": 179,
+  "unique_parameter_name_count": 122,
+  "steps": [
+    {
+      "order": 1,
+      "class": "io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule",
+      "parameter_version": "1",
+      "compatibility": "equivalent-for-validated-scope",
+      "evidence": "Deterministic synthetic and headless batch tests"
+    },
+    {
+      "order": 2,
+      "class": "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderModule",
+      "parameter_version": "1",
+      "compatibility": "equivalent-for-validated-scope",
+      "evidence": "Deterministic synthetic chromatogram-building tests"
+    },
+    {
+      "order": 3,
+      "class": "io.github.mzmine.modules.dataprocessing.featdet_smoothing.SmoothingModule",
+      "parameter_version": "1",
+      "compatibility": "source-present-not-yet-real-data-validated",
+      "evidence": "Public MIT source class exists"
+    },
+    {
+      "order": 4,
+      "class": "io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolverModule",
+      "parameter_version": "2",
+      "compatibility": "equivalent-for-validated-scope",
+      "evidence": "Deterministic local-minimum resolving tests"
+    },
+    {
+      "order": 5,
+      "class": "io.github.mzmine.modules.dataprocessing.filter_isotopefinder.IsotopeFinderModule",
+      "parameter_version": "1",
+      "compatibility": "source-present-not-yet-real-data-validated",
+      "evidence": "Public MIT source class exists"
+    },
+    {
+      "order": 6,
+      "class": "io.github.mzmine.modules.dataprocessing.filter_rowsfilter.RowsFilterModule",
+      "parameter_version": "2",
+      "compatibility": "source-present-not-yet-real-data-validated",
+      "evidence": "Public MIT source class exists"
+    },
+    {
+      "order": 7,
+      "class": "io.github.mzmine.modules.dataprocessing.align_join.JoinAlignerModule",
+      "parameter_version": "1",
+      "compatibility": "equivalent-for-validated-scope",
+      "evidence": "Deterministic two-sample alignment tests"
+    },
+    {
+      "order": 8,
+      "class": "io.github.mzmine.modules.dataprocessing.gapfill_peakfinder.multithreaded.MultiThreadPeakFinderModule",
+      "parameter_version": "1",
+      "compatibility": "source-present-not-yet-real-data-validated",
+      "evidence": "Single-thread peak-finder behavior is validated; this multithreaded module remains unvalidated"
+    },
+    {
+      "order": 9,
+      "class": "io.github.mzmine.modules.dataprocessing.filter_duplicatefilter.DuplicateFilterModule",
+      "parameter_version": "1",
+      "compatibility": "source-present-not-yet-real-data-validated",
+      "evidence": "Public MIT source class exists"
+    },
+    {
+      "order": 10,
+      "class": "io.github.mzmine.modules.dataprocessing.group_metacorrelate.corrgrouping.CorrelateGroupingModule",
+      "parameter_version": "2",
+      "compatibility": "source-present-not-yet-real-data-validated",
+      "evidence": "Public MIT source class exists"
+    }
+  ]
+}
