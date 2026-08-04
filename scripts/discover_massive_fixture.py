@@ -108,7 +108,34 @@ def copy_https(url: str, output: BinaryIO, timeout: int) -> None:
     shutil.copyfileobj(response, output, length=1024 * 1024)
 
 
-def copy_explicit_ftps(url: str, output: BinaryIO, timeout: int) -> None:
+def build_ftps_context(issuer_ca_file: Path | None) -> ssl.SSLContext:
+  """Build a hostname-verifying context, optionally trusting a pre-verified issuer.
+
+  The issuer file is not accepted as a general bypass. The calling workflow must first verify that
+  the leaf chains through this issuer to the operating-system root store. Python's PARTIAL_CHAIN flag
+  then permits the verified intermediate to act as the local trust anchor for a server that omits it.
+  """
+  context = ssl.create_default_context()
+  context.check_hostname = True
+  context.verify_mode = ssl.CERT_REQUIRED
+  if issuer_ca_file is not None:
+    issuer_ca_file = issuer_ca_file.resolve()
+    if not issuer_ca_file.is_file() or issuer_ca_file.stat().st_size <= 0:
+      raise DiscoveryError(f"FTPS issuer CA file is missing or empty: {issuer_ca_file}")
+    context.load_verify_locations(cafile=str(issuer_ca_file))
+    partial_chain = getattr(ssl, "VERIFY_X509_PARTIAL_CHAIN", 0)
+    if not partial_chain:
+      raise DiscoveryError("This Python/OpenSSL build does not support VERIFY_X509_PARTIAL_CHAIN")
+    context.verify_flags |= partial_chain
+  return context
+
+
+def copy_explicit_ftps(
+    url: str,
+    output: BinaryIO,
+    timeout: int,
+    issuer_ca_file: Path | None = None,
+) -> None:
   """Download an ftp:// URL through explicit TLS because MassIVE rejects clear FTP."""
   parsed = urllib.parse.urlparse(url)
   if parsed.scheme.lower() != "ftp" or not parsed.hostname:
@@ -120,7 +147,7 @@ def copy_explicit_ftps(url: str, output: BinaryIO, timeout: int) -> None:
   if not remote_path.startswith("/") or ".." in Path(remote_path).parts:
     raise DiscoveryError(f"Unsafe FTP path: {remote_path!r}")
 
-  context = ssl.create_default_context()
+  context = build_ftps_context(issuer_ca_file)
   ftp = ftplib.FTP_TLS(context=context, timeout=timeout)
   try:
     ftp.connect(parsed.hostname, parsed.port or 21, timeout=timeout)
@@ -135,20 +162,29 @@ def copy_explicit_ftps(url: str, output: BinaryIO, timeout: int) -> None:
       ftp.close()
 
 
-def copy_public_url(url: str, output: BinaryIO, timeout: int) -> str:
+def copy_public_url(
+    url: str,
+    output: BinaryIO,
+    timeout: int,
+    issuer_ca_file: Path | None = None,
+) -> str:
   parsed = urllib.parse.urlparse(url)
   scheme = parsed.scheme.lower()
   if scheme == "https":
     copy_https(url, output, timeout)
     return "https"
   if scheme == "ftp":
-    copy_explicit_ftps(url, output, timeout)
-    return "explicit-ftps"
+    copy_explicit_ftps(url, output, timeout, issuer_ca_file)
+    return "explicit-ftps-with-verified-issuer" if issuer_ca_file else "explicit-ftps"
   raise DiscoveryError(f"Unsupported transfer scheme: {scheme!r}")
 
 
 def download_and_hash(
-    url: str, expected_size: int, destination: Path, timeout: int
+    url: str,
+    expected_size: int,
+    destination: Path,
+    timeout: int,
+    issuer_ca_file: Path | None = None,
 ) -> tuple[str, str]:
   destination.parent.mkdir(parents=True, exist_ok=True)
   temp_path: Path | None = None
@@ -158,7 +194,7 @@ def download_and_hash(
         prefix=destination.name + ".", suffix=".part", dir=destination.parent, delete=False
     ) as temp_handle:
       temp_path = Path(temp_handle.name)
-      transport = copy_public_url(url, temp_handle, timeout)
+      transport = copy_public_url(url, temp_handle, timeout, issuer_ca_file)
 
     actual_size = temp_path.stat().st_size
     if actual_size != expected_size:
@@ -182,6 +218,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
   parser.add_argument("--expected-size", required=True, type=int)
   parser.add_argument("--output-directory", type=Path, required=True)
   parser.add_argument("--timeout", type=int, default=180)
+  parser.add_argument(
+      "--ftps-issuer-ca-file",
+      type=Path,
+      help="Issuer certificate already verified by the caller to a system root",
+  )
   parser.add_argument(
       "--resolve-only",
       action="store_true",
@@ -241,7 +282,13 @@ def main(argv: list[str] | None = None) -> int:
       return 0
 
     downloaded_path = output_directory / "download" / Path(args.listed_path).name
-    digest, transport = download_and_hash(file_url, args.expected_size, downloaded_path, args.timeout)
+    digest, transport = download_and_hash(
+        file_url,
+        args.expected_size,
+        downloaded_path,
+        args.timeout,
+        args.ftps_issuer_ca_file,
+    )
     report = {
         **resolution,
         "size_bytes": args.expected_size,
