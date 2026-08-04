@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: open-offline-ci-${{ github.workflow }}-${{ github.ref }}
+  group: open-offline-ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -33,14 +33,15 @@ jobs:
       - name: Record tested source commit
         shell: bash
         run: |
-          mkdir -p build/open_offline_ci
+          mkdir -p ci-artifacts
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "event=${GITHUB_EVENT_NAME}"
             echo "ref=${GITHUB_REF}"
+            echo "head_ref=${GITHUB_HEAD_REF}"
             echo "sha=$(git rev-parse HEAD)"
             echo "runner_os=${RUNNER_OS}"
-          } > build/open_offline_ci/independence-metadata.txt
+          } > ci-artifacts/independence-metadata.txt
 
       - name: Audit source, build files, and JARs
         run: python scripts/verify_open_offline.py
@@ -56,7 +57,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: independence-metadata-${{ github.run_id }}
-          path: build/open_offline_ci/independence-metadata.txt
+          path: ci-artifacts/independence-metadata.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -99,16 +100,17 @@ jobs:
       - name: Record tested source commit
         shell: bash
         run: |
-          mkdir -p build/open_offline_ci
+          mkdir -p ci-artifacts
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "event=${GITHUB_EVENT_NAME}"
             echo "ref=${GITHUB_REF}"
+            echo "head_ref=${GITHUB_HEAD_REF}"
             echo "sha=$(git rev-parse HEAD)"
             echo "baseline_sha=$(git -C baseline-mzmine-3.9 rev-parse HEAD)"
             echo "runner_os=${RUNNER_OS}"
             echo "java_home=${JAVA_HOME}"
-          } > build/open_offline_ci/compile-metadata.txt
+          } > ci-artifacts/compile-metadata.txt
 
       - name: Show tool versions and baseline commit
         shell: bash
@@ -141,7 +143,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tested-commit-${{ matrix.os }}-${{ github.run_id }}
-          path: build/open_offline_ci/compile-metadata.txt
+          path: ci-artifacts/compile-metadata.txt
           if-no-files-found: error
           retention-days: 14
 
