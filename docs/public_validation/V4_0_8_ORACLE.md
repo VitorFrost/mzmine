@@ -1,67 +1,97 @@
-# v4.0.8 Oracle — frozen reference commit
+# MZmine v4.0.8 oracle — frozen reference
 
-This document freezes the exact upstream commit used as the immutable comparison oracle for Milestone 4 (functional parity with the public LC-MS scientific core of mzmine v4.0.8). See #14 and #27 (4B.1).
+Status: **identity frozen; executable oracle blocked pending an independent public-source build**.
+
+This document records the immutable upstream source reference for Milestone 4B. It does not claim that issue #29 is complete.
 
 ## Frozen identity
 
 | Field | Value |
 |---|---|
-| Repository | `mzmine/mzmine` (GitHub) |
+| Repository | `mzmine/mzmine` |
 | Tag | `v4.0.8` |
-| Exact commit SHA | `8029f930d28c0447f0acf2bcabef0a79865ad434` |
-| Tag commit message | "Increment patch version" |
-| Tag commit author | SteffenHeu (via github-actions bot) |
-| Tag commit date | 2024-04-25T17:49:53Z |
-| Full changelog range | `v4.0.3...v4.0.8` (9 PRs: user-tab/system-clock fix, remove Waters package, drag-drop install fix, calibrant file parsing fix, workshop fixes, Thermo parser extraction path fix, mzXML MS1/MS2 closing-tag fix, parallel-stream pairs helper) |
-| License | MIT (SPDX `MIT`), confirmed via repository metadata |
-| Repository visibility | Public |
+| Exact commit | `8029f930d28c0447f0acf2bcabef0a79865ad434` |
+| Source tree in scope | `mzmine-community` |
+| License | MIT |
+| Intended role | Behavioral comparison oracle for the public LC-MS scientific core |
 
-## Verification method
+The tag resolves directly to the commit above. The commit itself is the patch-version update for the v4.0.8 release; scientific comparisons must therefore use the complete source tree at that commit, not only its final version-bump diff.
 
-The commit was resolved directly via the GitHub API (`GET /repos/mzmine/mzmine/git/refs/tags/v4.0.8`), which returned an annotated/lightweight tag object pointing to the commit SHA above. The commit was independently confirmed via `GET /repos/mzmine/mzmine/commits/{sha}`, showing a single 6-line diff to `mzmine-community/src/main/resources/mzmineversion.properties` (a version-bump commit, consistent with the release-note pattern used by this project's CI).
+## Frozen toolchain metadata
 
-The release notes for `v4.0.8` (GitHub Releases) list the following merged PRs between `v4.0.3` and `v4.0.8`, none of which touch the core LC-MS scientific modules in scope for this milestone (mzML import, mass detection, ADAP, smoothing, resolver, isotope finder, rows filter, join aligner, gap filling, duplicate filter, correlation grouping, export):
+The source and wrapper metadata at the frozen commit specify:
 
-- update more MZmine mentions to mzmine (#1793)
-- Single users tab and fix for system clock offset (#1809)
-- remove waters package (#1808)
-- Directly select user after drag drop install (#1810)
-- fix calibrant file parsing (#1812)
-- Workshopfixes (#1798)
-- move thermo parser extraction path, add to tmp file cleanup (#1816)
-- Fix mzXML as ms1 scan closing tag is after MS2 scans (#1814)
-- Easy parallel stream on pairs in a list (#1804)
+- Java 21;
+- preview features enabled by the project build;
+- Gradle Wrapper 8.5 (`gradle-8.5-bin.zip`).
 
-The `mzXML MS1/MS2 closing tag` fix (#1814) and the `Thermo parser extraction path` fix (#1816) are the only two entries with plausible relevance to import/parsing behavior and must be recorded in the module inventory (#31 / 4B.3) as candidate parameter/algorithm changes to verify, even though neither targets mzML (the format used by this fork's governed public corpus).
+Candidate public-source compilation command:
 
-## Build requirements (from the frozen commit's own repository metadata)
-
-- Build system: Gradle (Kotlin DSL), consistent with this fork's own `build.gradle.kts` lineage.
-- Language: Java (project language per repository metadata).
-- The exact JDK/Gradle version pins must be read directly from the frozen commit's `gradle.properties`/`build.gradle.kts` at build time; this document intentionally does not restate version numbers that could drift from the frozen source — the build command is:
-
-```
+```bash
 git clone https://github.com/mzmine/mzmine.git
 cd mzmine
-git checkout 8029f930d28c0447f0acf2bcabef0a79865ad434
-./gradlew clean build
+git checkout --detach 8029f930d28c0447f0acf2bcabef0a79865ad434
+./gradlew :mzmine-community:classes --no-daemon
 ```
 
-## Proprietary dependency check
+This command is recorded as the initial candidate for the public scientific source slice. It is **not yet an accepted reproducible oracle build**.
 
-The official `mzmine/mzmine` repository at this commit is published under the MIT license at the source level. This fork's existing independence-audit tooling (already used across Milestones 1–2) must be run against a local build of this frozen commit before it is used as a differential oracle, to confirm:
+## Independence blocker
 
-- no `io.mzio` proprietary binary is required to build or run the headless LC-MS core;
-- any login/authentication/licensing behavior present in the built artifact is confined to GUI/account features outside the scientific core under test, and is not required for headless batch execution of the modules in scope.
+The frozen v4.0.8 version catalog declares `io.mzio` coordinates. The open-offline validation policy prohibits downloading, bundling, reconstructing, stubbing as equivalent, or fabricating entitlement for proprietary implementations.
 
-This check is tracked as an explicit acceptance item and must be completed and recorded (pass/fail, with evidence) before this oracle is used in #32/#33/#34 (4B.4–4B.6).
+Therefore the unmodified v4.0.8 tree is currently classified as:
+
+```text
+execution_status = blocked-by-independence-policy
+```
+
+Before the source can be used as an executable differential oracle, a reviewed build procedure must demonstrate that the public LC-MS scientific slice can compile and run without prohibited binaries and without silently removing scientific behavior under comparison.
+
+Acceptable outcomes are:
+
+1. a reproducible public-source build that excludes only out-of-scope account, GUI, vendor, or proprietary integration code and documents every exclusion; or
+2. a documented failure showing which public scientific classes are inseparable from prohibited dependencies, leaving the direct executable comparison blocked.
+
+## Release-note relevance
+
+The v4.0.8 release notes include changes outside the direct LC-MS feature-processing scope. Two import-adjacent changes require explicit inventory review:
+
+- mzXML MS1/MS2 closing-tag handling;
+- Thermo parser extraction-path handling.
+
+Neither should be assumed relevant to governed mzML behavior, but both must remain recorded as candidate import differences until the module inventory and differential tests resolve them.
+
+## Relationship to the parity inventory
+
+The machine-readable inventory in `datasets/parity/mzmine_v408_lcms_core_inventory.json` is the source of truth for:
+
+- oracle repository, tag, and commit;
+- Java and Gradle build metadata;
+- independence blockers;
+- module classifications;
+- parameter-mapping status;
+- governed datasets and tolerance profiles;
+- differential-gate status.
+
+This Markdown document is a human-readable summary and must not contradict the validated inventory.
+
+## Acceptance state for issue #29
+
+| Criterion | Current state |
+|---|---|
+| Exact commit frozen and documented | Passed |
+| Java/Gradle requirements documented | Passed |
+| Reproducible build tested | **Pending** |
+| No proprietary `io.mzio` binary required | **Not demonstrated; currently blocked** |
+| Runnable headless scientific oracle produced | **Pending** |
+
+Issue #29 must remain open until the pending criteria are supported by retained CI or local-build evidence.
 
 ## Non-goals
 
-- This document does not merge upstream `master` into this fork.
-- This document does not change this fork's own application version (remains 3.9.1 until Milestone 4 acceptance criteria are met).
-- This document does not build the full GUI/installer — only the headless scientific core is in scope for the oracle.
-
-## Status
-
-Commit frozen. Independence/build verification (see "Proprietary dependency check" above) is the next required step before this oracle can be used in 4B.4–4B.6.
+- merging upstream `master`;
+- changing the fork application version;
+- redistributing proprietary binaries;
+- treating source-file identity as behavioral equivalence;
+- claiming parity before differential reports pass.
