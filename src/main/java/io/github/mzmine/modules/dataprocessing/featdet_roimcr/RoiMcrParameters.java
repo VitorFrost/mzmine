@@ -78,6 +78,22 @@ public final class RoiMcrParameters extends SimpleParameterSet {
       "ROI weighting exponent",
       "0 preserves intensity, 0.5 is Pareto weighting, and 1 is aggressive unit-maximum weighting.",
       MZmineCore.getConfiguration().getScoreFormat(), 0.5, 0d, 1d);
+  public static final DoubleParameter robustnessNoiseFactor = new DoubleParameter(
+      "Robustness noise factor",
+      "Builds lower- and higher-noise ROI models using 1/factor and factor perturbations.",
+      MZmineCore.getConfiguration().getScoreFormat(), 1.5, 1.01, 4d);
+  public static final DoubleParameter robustnessWeightingStep = new DoubleParameter(
+      "Robustness weighting step",
+      "Fits neighboring ROI-weighting models at exponent minus/plus this step.",
+      MZmineCore.getConfiguration().getScoreFormat(), 0.1, 0d, 0.5);
+  public static final DoubleParameter minimumPerturbationSimilarity = new DoubleParameter(
+      "Minimum perturbation similarity",
+      "Minimum combined chromatographic, spectral, and apex similarity for component support.",
+      MZmineCore.getConfiguration().getScoreFormat(), 0.70, 0d, 1d);
+  public static final DoubleParameter minimumPerturbationSupport = new DoubleParameter(
+      "Minimum perturbation support",
+      "Minimum fraction of neighboring models that must reproduce a stable component.",
+      MZmineCore.getConfiguration().getScoreFormat(), 0.75, 0d, 1d);
   public static final DoubleParameter minimumSpectralContribution = new DoubleParameter(
       "Minimum spectral contribution", "Minimum loading relative to the strongest component ion.",
       MZmineCore.getConfiguration().getScoreFormat(), 0.01, 0d, 1d);
@@ -95,8 +111,9 @@ public final class RoiMcrParameters extends SimpleParameterSet {
             nnlsIterations, convergenceTolerance, minimumRankImprovement,
             minimumRestartStability, smoothingRadius, unimodalityFlexibility, spectralSparsity,
             minimumComponentIons, minimumComponentEnergy, maximumTemporalCosine,
-            weightingExponent, minimumSpectralContribution, minimumAssignmentFraction,
-            componentEdgeFraction},
+            weightingExponent, robustnessNoiseFactor, robustnessWeightingStep,
+            minimumPerturbationSimilarity, minimumPerturbationSupport,
+            minimumSpectralContribution, minimumAssignmentFraction, componentEdgeFraction},
         "https://github.com/VitorFrost/mzmine/blob/open-offline-main/docs/ROI_MCR_FEATURE_DETECTION.md");
   }
 }
