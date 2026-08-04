@@ -52,8 +52,6 @@ jobs:
           TLS_DIR="build/public_fixture_discovery/tls"
           mkdir -p "$TLS_DIR/certs"
 
-          # Capture exactly what the public FTPS endpoint presents. Failure of the
-          # normal system-chain verification is expected when an intermediate is omitted.
           timeout 30s openssl s_client \
             -starttls ftp \
             -connect massive-ftp.ucsd.edu:21 \
@@ -85,15 +83,15 @@ jobs:
             "$TLS_DIR/leaf-aia.txt" | head -n 1)"
           test -n "$AIA_URL"
           printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-aia-url.txt"
+          printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-fetch-url.txt"
 
-          # Prefer the HTTPS form of the CA endpoint. The certificate is accepted
-          # only after its signature chain verifies against the system trust store.
-          AIA_FETCH_URL="${AIA_URL/http:\/\//https://}"
-          printf '%s\n' "$AIA_FETCH_URL" >"$TLS_DIR/issuer-fetch-url.txt"
+          # The CA Issuers URI is supplied inside the signed leaf certificate. Its
+          # HTTP transport is not trusted by itself: the downloaded issuer is accepted
+          # only when OpenSSL verifies leaf -> issuer -> system root.
           curl --fail --show-error --silent --location \
             --user-agent 'mzmine-open-offline-certificate-discovery/1' \
             --connect-timeout 20 --max-time 60 \
-            --output "$TLS_DIR/issuer.download" "$AIA_FETCH_URL"
+            --output "$TLS_DIR/issuer.download" "$AIA_URL"
 
           if openssl x509 -in "$TLS_DIR/issuer.download" -noout >/dev/null 2>&1; then
             cp "$TLS_DIR/issuer.download" "$TLS_DIR/issuer.pem"
