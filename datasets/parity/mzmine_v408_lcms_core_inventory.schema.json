@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/VitorFrost/mzmine/datasets/parity/mzmine_v408_lcms_core_inventory.schema.json",
+  "title": "MZmine v4.0.8 LC-MS core parity inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "inventory_id",
+    "target",
+    "fork",
+    "classification_policy",
+    "source_roots",
+    "dataset_groups",
+    "tolerance_profiles",
+    "finding_catalog",
+    "modules"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "inventory_id": {"type": "string", "minLength": 1},
+    "target": {"$ref": "#/$defs/target"},
+    "fork": {"$ref": "#/$defs/fork"},
+    "classification_policy": {"$ref": "#/$defs/classificationPolicy"},
+    "source_roots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_39", "oracle_408", "open_offline"],
+      "properties": {
+        "base_39": {"$ref": "#/$defs/sourceRoot"},
+        "oracle_408": {"$ref": "#/$defs/sourceRoot"},
+        "open_offline": {"$ref": "#/$defs/sourceRoot"}
+      }
+    },
+    "dataset_groups": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]*$"},
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {"type": "string", "minLength": 1}
+      }
+    },
+    "tolerance_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]*$"},
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": {"$ref": "#/$defs/tolerance"}
+      }
+    },
+    "finding_catalog": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]*$"},
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/module"}
+    }
+  },
+  "$defs": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "tag",
+        "commit",
+        "license",
+        "role",
+        "source_tree",
+        "tag_resolution",
+        "build"
+      ],
+      "properties": {
+        "repository": {"const": "mzmine/mzmine"},
+        "tag": {"const": "v4.0.8"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "license": {"const": "MIT"},
+        "role": {"const": "behavioral-oracle"},
+        "source_tree": {"const": "mzmine-community"},
+        "tag_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["object_type", "resolved_at"],
+          "properties": {
+            "object_type": {"const": "commit"},
+            "resolved_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+          }
+        },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "system",
+            "java_version",
+            "enable_preview",
+            "candidate_command",
+            "execution_status",
+            "blockers",
+            "policy"
+          ],
+          "properties": {
+            "system": {"const": "Gradle Wrapper"},
+            "java_version": {"const": "21"},
+            "enable_preview": {"const": true},
+            "candidate_command": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "execution_status": {
+              "enum": [
+                "blocked-by-independence-policy",
+                "reproducible-public-slice",
+                "complete"
+              ]
+            },
+            "blockers": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "policy": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "fork": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "integration_branch",
+        "scientific_base_commit",
+        "application_version"
+      ],
+      "properties": {
+        "repository": {"const": "VitorFrost/mzmine"},
+        "integration_branch": {"const": "open-offline-main"},
+        "scientific_base_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "application_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "classificationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "equivalent_requires_differential_evidence"],
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "enum": ["Equivalent", "Adapted", "Not implemented", "Out of scope"]
+          }
+        },
+        "equivalent_requires_differential_evidence": {"const": true}
+      }
+    },
+    "sourceRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commit", "prefix"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "ref": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "prefix": {"type": "string", "minLength": 1}
+      }
+    },
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["absolute", "relative"],
+      "properties": {
+        "absolute": {"type": "number", "minimum": 0},
+        "relative": {"type": "number", "minimum": 0}
+      }
+    },
+    "blobRoles": {
+      "type": "object",
+      "minProperties": 2,
+      "additionalProperties": false,
+      "required": ["oracle_408", "open_offline"],
+      "properties": {
+        "base_39": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "oracle_408": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "open_offline": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "area",
+        "capability",
+        "classes",
+        "parameter_versions",
+        "blobs",
+        "parameter_mapping_status",
+        "classification",
+        "evidence",
+        "findings",
+        "gate"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+        "area": {"type": "string", "minLength": 1},
+        "capability": {"type": "string", "minLength": 1},
+        "classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["module", "parameters"],
+          "properties": {
+            "module": {
+              "type": "string",
+              "pattern": "^io\\.github\\.mzmine(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+            },
+            "parameters": {
+              "type": "string",
+              "pattern": "^io\\.github\\.mzmine(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$"
+            }
+          }
+        },
+        "parameter_versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_39", "oracle_408"],
+          "properties": {
+            "base_39": {"type": ["integer", "null"], "minimum": 0},
+            "oracle_408": {"type": ["integer", "null"], "minimum": 0}
+          }
+        },
+        "blobs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["module"],
+          "properties": {
+            "module": {"$ref": "#/$defs/blobRoles"},
+            "parameters": {"$ref": "#/$defs/blobRoles"}
+          }
+        },
+        "parameter_mapping_status": {
+          "enum": ["verified", "partial", "pending", "not-applicable"]
+        },
+        "classification": {
+          "enum": ["Equivalent", "Adapted", "Not implemented", "Out of scope"]
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_presence_verified", "direct_differential_complete"],
+          "properties": {
+            "source_presence_verified": {"type": "boolean"},
+            "direct_differential_complete": {"type": "boolean"}
+          }
+        },
+        "findings": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dataset_group",
+            "stage",
+            "exact_fields",
+            "tolerance_profile",
+            "status"
+          ],
+          "properties": {
+            "dataset_group": {"type": "string", "minLength": 1},
+            "stage": {"type": "string", "minLength": 1},
+            "exact_fields": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "tolerance_profile": {"type": "string", "minLength": 1},
+            "status": {
+              "enum": [
+                "contract-defined",
+                "exporter-pending",
+                "oracle-run-pending",
+                "comparison-pending",
+                "complete"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

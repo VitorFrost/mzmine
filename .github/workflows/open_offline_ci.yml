@@ -49,15 +49,20 @@ jobs:
       - name: Validate public dataset manifest
         run: python scripts/fetch_public_test_data.py --validate
 
-      - name: Test fail-closed dataset policy
+      - name: Validate frozen MZmine v4.0.8 parity inventory
+        run: >-
+          python scripts/validate_mzmine_4_parity_inventory.py
+          --output ci-artifacts/mzmine-v408-parity-inventory.json
+
+      - name: Test fail-closed dataset and parity policies
         run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
 
-      - name: Upload independence metadata
+      - name: Upload independence and parity metadata
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: independence-metadata-${{ github.run_id }}
-          path: ci-artifacts/independence-metadata.txt
+          path: ci-artifacts/
           if-no-files-found: error
           retention-days: 14
 
