@@ -21,8 +21,8 @@ import io.github.mzmine.parameters.parametertypes.tolerances.MZTolerance;
 import io.github.mzmine.project.impl.MZmineProjectImpl;
 import io.github.mzmine.taskcontrol.TaskStatus;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import org.junit.jupiter.api.Test;
 
 class RoiMcrTaskIntegrationTest {
@@ -32,10 +32,10 @@ class RoiMcrTaskIntegrationTest {
     final MZmineProjectImpl project = new MZmineProjectImpl();
     MZmineCore.getProjectManager().setCurrentProject(project);
     final RawDataFile raw = mock(RawDataFile.class);
-    final List<Scan> scans = createScans(raw);
+    final ObservableList<Scan> scans = createScans(raw);
     when(raw.getName()).thenReturn("synthetic-roimcr");
     when(raw.getScans()).thenReturn(scans);
-    when(raw.getAppliedMethods()).thenReturn(new ArrayList<>());
+    when(raw.getAppliedMethods()).thenReturn(FXCollections.observableArrayList());
     project.addFile(raw);
 
     final RoiMcrParameters parameters = new RoiMcrParameters();
@@ -67,8 +67,8 @@ class RoiMcrTaskIntegrationTest {
     });
   }
 
-  private static List<Scan> createScans(RawDataFile raw) {
-    final List<Scan> scans = new ArrayList<>();
+  private static ObservableList<Scan> createScans(RawDataFile raw) {
+    final ObservableList<Scan> scans = FXCollections.observableArrayList();
     for (int index = 0; index < 21; index++) {
       final Scan scan = mock(Scan.class);
       final MassList massList = mock(MassList.class);
