@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - agent/public-small-lcms-fixture
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - scripts/discover_massive_fixture.py
+      - .github/workflows/discover_public_fixture.yml
+      - datasets/public_validation_manifest.json
   workflow_dispatch:
 
 permissions:
