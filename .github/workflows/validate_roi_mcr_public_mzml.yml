@@ -76,7 +76,7 @@ jobs:
           OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/blank_001.mzML
         run: >-
           ./gradlew test
-          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*ValidationTest"
+          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*Test"
           --no-daemon
           --stacktrace
 
@@ -88,7 +88,7 @@ jobs:
           OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\blank_001.mzML
         run: >-
           .\gradlew.bat test
-          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*ValidationTest"
+          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*Test"
           --no-daemon
           --stacktrace
 
