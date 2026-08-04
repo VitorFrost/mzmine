@@ -72,23 +72,28 @@ jobs:
 
           openssl x509 -in "$LEAF" -noout \
             -subject -issuer -serial -dates -fingerprint -sha256 \
-            -ext subjectAltName -ext authorityInfoAccess \
             >"$TLS_DIR/leaf-summary.txt"
+          openssl x509 -in "$LEAF" -noout -ext subjectAltName \
+            >"$TLS_DIR/leaf-san.txt"
+          openssl x509 -in "$LEAF" -noout -ext authorityInfoAccess \
+            >"$TLS_DIR/leaf-aia.txt"
           openssl x509 -in "$LEAF" -noout -text >"$TLS_DIR/leaf-full.txt"
 
-          grep -q 'DNS:massive-ftp.ucsd.edu' "$TLS_DIR/leaf-summary.txt"
+          grep -q 'DNS:massive-ftp.ucsd.edu' "$TLS_DIR/leaf-san.txt"
 
-          AIA_URL="$(openssl x509 -in "$LEAF" -noout -text \
-            | sed -n 's/^[[:space:]]*CA Issuers - URI://p' \
-            | head -n 1)"
+          AIA_URL="$(sed -n 's/^[[:space:]]*CA Issuers - URI://p' \
+            "$TLS_DIR/leaf-aia.txt" | head -n 1)"
           test -n "$AIA_URL"
           printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-aia-url.txt"
 
-          # An HTTP AIA URL is acceptable only because the downloaded certificate is
-          # cryptographically verified against the system trust store before use.
+          # Prefer the HTTPS form of the CA endpoint. The certificate is accepted
+          # only after its signature chain verifies against the system trust store.
+          AIA_FETCH_URL="${AIA_URL/http:\/\//https://}"
+          printf '%s\n' "$AIA_FETCH_URL" >"$TLS_DIR/issuer-fetch-url.txt"
           curl --fail --show-error --silent --location \
+            --user-agent 'mzmine-open-offline-certificate-discovery/1' \
             --connect-timeout 20 --max-time 60 \
-            --output "$TLS_DIR/issuer.download" "$AIA_URL"
+            --output "$TLS_DIR/issuer.download" "$AIA_FETCH_URL"
 
           if openssl x509 -in "$TLS_DIR/issuer.download" -noout >/dev/null 2>&1; then
             cp "$TLS_DIR/issuer.download" "$TLS_DIR/issuer.pem"
@@ -149,15 +154,16 @@ jobs:
           source = output / "download" / "Method1_Set277193_100_BOST-06537.mzML"
           digest = hashlib.sha256(source.read_bytes()).hexdigest()
           report = json.loads((output / "fixture_resolution.json").read_text(encoding="utf-8"))
+          fingerprint_line = next(
+              line for line in (output / "tls" / "leaf-summary.txt").read_text().splitlines()
+              if "Fingerprint=" in line
+          )
           report.update({
               "size_bytes": source.stat().st_size,
               "sha256": digest,
               "transfer_transport": "explicit FTPS with AIA intermediate verified to system roots",
-              "leaf_certificate_sha256": next(
-                  line.split("=", 1)[1].replace(":", "").strip().lower()
-                  for line in (output / "tls" / "leaf-summary.txt").read_text().splitlines()
-                  if line.startswith("sha256 Fingerprint=") or line.startswith("SHA256 Fingerprint=")
-              ),
+              "leaf_certificate_sha256": fingerprint_line.split("=", 1)[1]
+                  .replace(":", "").strip().lower(),
               "local_file": str(source.resolve()),
           })
           (output / "fixture_report.json").write_text(
@@ -166,11 +172,15 @@ jobs:
           print(json.dumps(report, indent=2, sort_keys=True))
           PY
 
-      - name: Remove downloaded dataset bytes and temporary CA bundle
+      - name: Remove downloaded dataset bytes and temporary certificates
         if: always()
         run: |
           rm -rf build/public_fixture_discovery/download
+          rm -rf build/public_fixture_discovery/tls/certs
+          rm -f build/public_fixture_discovery/tls/issuer.download
+          rm -f build/public_fixture_discovery/tls/issuer.pem
           rm -f build/public_fixture_discovery/tls/verified-ca-bundle.pem
+          rm -f build/public_fixture_discovery/tls/leaf-full.txt
 
       - name: Upload metadata and TLS diagnostics only
         if: always()
@@ -182,7 +192,10 @@ jobs:
             build/public_fixture_discovery/fixture_report.json
             build/public_fixture_discovery/tls/handshake.txt
             build/public_fixture_discovery/tls/leaf-summary.txt
+            build/public_fixture_discovery/tls/leaf-san.txt
+            build/public_fixture_discovery/tls/leaf-aia.txt
             build/public_fixture_discovery/tls/issuer-aia-url.txt
+            build/public_fixture_discovery/tls/issuer-fetch-url.txt
             build/public_fixture_discovery/tls/issuer-summary.txt
             build/public_fixture_discovery/tls/verify-result.txt
           if-no-files-found: warn
