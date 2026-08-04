@@ -185,8 +185,7 @@ public class TaskControllerImpl implements TaskController, Runnable {
           try {
             this.wait(100);
           } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return;
+            // Preserve the legacy always-running scheduler behavior.
           }
         }
       }
@@ -249,8 +248,7 @@ public class TaskControllerImpl implements TaskController, Runnable {
       try {
         Thread.sleep(TASKCONTROLLER_THREAD_SLEEP);
       } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        return;
+        // Preserve the legacy always-running scheduler behavior.
       }
     }
   }
