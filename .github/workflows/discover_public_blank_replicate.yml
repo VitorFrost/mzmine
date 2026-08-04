@@ -1,0 +1,132 @@
+name: Validate Public Blank and Replicate Imports
+
+on:
+  push:
+    branches:
+      - agent/public-blank-replicate-fixtures
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - scripts/fetch_public_test_data.py
+      - .github/workflows/discover_public_blank_replicate.yml
+      - datasets/public_blank_replicate_manifest.json
+      - src/test/java/io/github/mzmine/modules/io/import_rawdata_mzml/PublicBlankReplicateMzMLImportTest.java
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-imports:
+    name: Import blank and replicate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java 20
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate blank/replicate manifest
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_blank_replicate_manifest.json
+          --validate
+
+      - name: Download and verify approved public fixtures
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_blank_replicate_manifest.json
+          --dataset zenodo-14001110-banane-30ngml-002
+          --dataset zenodo-14001110-blank-001
+          --output-dir build/public_validation_data
+          --timeout 300
+          --retries 3
+
+      - name: Verify frozen fixtures again before Java import
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_blank_replicate_manifest.json
+          --dataset zenodo-14001110-banane-30ngml-002
+          --dataset zenodo-14001110-blank-001
+          --output-dir build/public_validation_data
+          --verify-existing
+
+      - name: Import and characterize on Linux
+        if: runner.os != 'Windows'
+        env:
+          OPEN_OFFLINE_PUBLIC_MZML_REPLICATE_2: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/Banane_30ngmL_002.mzML
+          OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/blank_001.mzML
+        run: >-
+          ./gradlew test
+          --tests io.github.mzmine.modules.io.import_rawdata_mzml.PublicBlankReplicateMzMLImportTest
+          --no-daemon
+          --stacktrace
+
+      - name: Import and characterize on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OPEN_OFFLINE_PUBLIC_MZML_REPLICATE_2: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\Banane_30ngmL_002.mzML
+          OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\blank_001.mzML
+        run: >-
+          .\gradlew.bat test
+          --tests io.github.mzmine.modules.io.import_rawdata_mzml.PublicBlankReplicateMzMLImportTest
+          --no-daemon
+          --stacktrace
+
+      - name: Display import summary on Linux
+        if: runner.os != 'Windows'
+        run: cat build/public_validation/zenodo_14001110_blank_replicate_import_summary.json
+
+      - name: Display import summary on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Get-Content build/public_validation/zenodo_14001110_blank_replicate_import_summary.json
+
+      - name: Remove downloaded dataset bytes on Linux
+        if: always() && runner.os != 'Windows'
+        run: rm -rf build/public_validation_data
+
+      - name: Remove downloaded dataset bytes on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path build/public_validation_data) {
+            Remove-Item -Recurse -Force build/public_validation_data
+          }
+
+      - name: Upload import report only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenodo-14001110-blank-replicate-import-${{ matrix.os }}
+          path: |
+            build/public_validation/zenodo_14001110_blank_replicate_import_summary.json
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
+          retention-days: 14
