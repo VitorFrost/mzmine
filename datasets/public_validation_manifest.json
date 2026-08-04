@@ -79,9 +79,51 @@
       ]
     },
     {
+      "id": "zenodo-14001110-banane-30ngml-001",
+      "tier": 2,
+      "status": "frozen",
+      "download_enabled": true,
+      "purpose": "First real public LC-MS mzML for import statistics, performance, and deterministic processing",
+      "source": {
+        "type": "zenodo",
+        "record_id": "14001110",
+        "doi": "10.5281/zenodo.14001110",
+        "path": "Banane_30ngmL_001.mzML",
+        "page_url": "https://zenodo.org/records/14001110",
+        "api_url": "https://zenodo.org/api/records/14001110",
+        "download_url": "https://zenodo.org/api/records/14001110/files/Banane_30ngmL_001.mzML/content"
+      },
+      "license": {
+        "status": "verified",
+        "identifier": "cc-by-4.0",
+        "evidence_url": "https://zenodo.org/records/14001110",
+        "note": "Zenodo record metadata reports Creative Commons Attribution 4.0 International. Attribution to the dataset creator is required."
+      },
+      "files": [
+        {
+          "relative_path": "zenodo/14001110/Banane_30ngmL_001.mzML",
+          "download_url": "https://zenodo.org/api/records/14001110/files/Banane_30ngmL_001.mzML/content",
+          "expected_size_bytes": 87090777,
+          "repository_md5": "488ed6c48c0db085de966e96e74902cc",
+          "sha256": "2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d"
+        }
+      ],
+      "instrument": "Pending mzML metadata inspection",
+      "polarity": "Pending mzML metadata inspection",
+      "acquisition": "Untargeted LC-MS open-format dataset; exact scan semantics pending import report",
+      "expected_assertions": [
+        "file size and SHA-256 match the frozen manifest",
+        "import completes without login or network access after download",
+        "scan count, RT range, MS levels, polarity, and m/z range are deterministic",
+        "mass detection and feature counts are repeatable",
+        "runtime and memory are recorded",
+        "results are stable across supported thread counts"
+      ]
+    },
+    {
       "id": "massive-msv000101091-small-lcms-01",
       "tier": 2,
-      "status": "candidate",
+      "status": "transport-blocked-candidate",
       "download_enabled": false,
       "purpose": "Small real-world mzML for import, performance, and deterministic feature tests",
       "source": {
@@ -90,13 +132,13 @@
         "path": "ccms_peak/Metabolomics raw data/Method1_Set277193_100_BOST-06537.mzML",
         "page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000101091",
         "files_page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset_files.jsp?task=f6100fda35654d40a061715874c699b0",
-        "download_url": null
+        "download_url": "ftp://massive-ftp.ucsd.edu/v12/MSV000101091/ccms_peak/Metabolomics%20raw%20data/Method1_Set277193_100_BOST-06537.mzML"
       },
       "license": {
-        "status": "pending-dataset-page-verification",
-        "identifier": null,
-        "evidence_url": null,
-        "note": "MassIVE commonly uses CC0, but this individual dataset license must be captured explicitly before download is enabled."
+        "status": "verified",
+        "identifier": "CC0-1.0",
+        "evidence_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000101091",
+        "note": "The file provenance and FTPS certificate chain were resolved, but the hosted CI runner cannot establish the passive FTPS data channel. The entry remains disabled until a reliable HTTPS route or self-hosted transfer is available."
       },
       "files": [
         {
