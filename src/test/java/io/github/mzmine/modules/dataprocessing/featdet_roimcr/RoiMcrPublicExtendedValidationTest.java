@@ -6,7 +6,6 @@ package io.github.mzmine.modules.dataprocessing.featdet_roimcr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +19,6 @@ import io.github.mzmine.datamodel.Scan;
 import io.github.mzmine.datamodel.featuredata.FeatureDataUtils;
 import io.github.mzmine.datamodel.features.FeatureList;
 import io.github.mzmine.datamodel.features.FeatureListRow;
-import io.github.mzmine.datamodel.features.ModularFeatureList;
 import io.github.mzmine.datamodel.features.types.annotations.CommentType;
 import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.modules.MZmineProcessingModule;
@@ -61,6 +59,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /** Extended public-data validation across independent chromatographic regions. */
@@ -406,9 +405,10 @@ class RoiMcrPublicExtendedValidationTest {
 
   private static Path requiredFile(String environment) {
     final String value = System.getenv(environment);
-    assertNotNull(value, "Missing environment variable " + environment);
+    Assumptions.assumeTrue(value != null && !value.isBlank(),
+        "Public fixture environment variable is not set: " + environment);
     final Path path = Path.of(value).toAbsolutePath();
-    assertTrue(Files.isRegularFile(path), "Missing public fixture " + path);
+    Assumptions.assumeTrue(Files.isRegularFile(path), "Public fixture is unavailable: " + path);
     return path;
   }
 
