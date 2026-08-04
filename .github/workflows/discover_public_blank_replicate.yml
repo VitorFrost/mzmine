@@ -1,0 +1,72 @@
+name: Discover Public Blank and Replicate
+
+on:
+  push:
+    branches:
+      - agent/public-blank-replicate-fixtures
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - scripts/discover_zenodo_fixture.py
+      - .github/workflows/discover_public_blank_replicate.yml
+      - datasets/public_validation_manifest.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover-fixture:
+    name: Discover ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Banane replicate 2
+            file: Banane_30ngmL_002.mzML
+            slug: banane-30ngml-002
+          - label: Blank 1
+            file: blank_001.mzML
+            slug: blank-001
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve, verify, download, and hash public fixture
+        shell: bash
+        run: >-
+          python scripts/discover_zenodo_fixture.py
+          --record 14001110
+          --file "${{ matrix.file }}"
+          --required-license cc-by-4.0
+          --output-directory "build/public_fixture_discovery/${{ matrix.slug }}"
+          --timeout 300
+
+      - name: Display frozen metadata candidate
+        shell: bash
+        run: cat "build/public_fixture_discovery/${{ matrix.slug }}/fixture_report.json"
+
+      - name: Remove downloaded dataset bytes
+        if: always()
+        shell: bash
+        run: rm -rf "build/public_fixture_discovery/${{ matrix.slug }}/download"
+
+      - name: Upload metadata report only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenodo-14001110-${{ matrix.slug }}-report
+          path: |
+            build/public_fixture_discovery/${{ matrix.slug }}/fixture_resolution.json
+            build/public_fixture_discovery/${{ matrix.slug }}/fixture_report.json
+          if-no-files-found: warn
+          retention-days: 14
