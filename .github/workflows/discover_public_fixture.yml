@@ -1,4 +1,4 @@
-name: Discover Public MassIVE Fixture
+name: Discover Public LC-MS Fixture
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
     branches:
       - open-offline-main
     paths:
-      - scripts/discover_massive_fixture.py
+      - scripts/discover_zenodo_fixture.py
       - .github/workflows/discover_public_fixture.yml
       - datasets/public_validation_manifest.json
   workflow_dispatch:
@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  discover-small-lcms-fixture:
-    name: Resolve and hash MSV000101091 fixture
+  discover-real-lcms-fixture:
+    name: Resolve and hash Zenodo LC-MS fixture
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -31,157 +31,42 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve official dataset and file URL
+      - name: Resolve record metadata and file provenance
         run: >-
-          python scripts/discover_massive_fixture.py
-          --task f6100fda35654d40a061715874c699b0
-          --accession MSV000101091
-          --listed-path "f.MSV000101091/ccms_peak/Metabolomics raw data/Method1_Set277193_100_BOST-06537.mzML"
-          --expected-size 16978328
+          python scripts/discover_zenodo_fixture.py
+          --record 14001110
+          --file Banane_30ngmL_001.mzML
+          --required-license cc-by-4.0
           --output-directory build/public_fixture_discovery
-          --timeout 60
+          --timeout 90
           --resolve-only
 
       - name: Display resolved metadata
         run: cat build/public_fixture_discovery/fixture_resolution.json
 
-      - name: Diagnose and verify FTPS certificate chain
-        shell: bash
-        run: |
-          set -euo pipefail
-          TLS_DIR="build/public_fixture_discovery/tls"
-          mkdir -p "$TLS_DIR/certs"
+      - name: Download through verified HTTPS and calculate SHA-256
+        run: >-
+          timeout 600s python scripts/discover_zenodo_fixture.py
+          --record 14001110
+          --file Banane_30ngmL_001.mzML
+          --required-license cc-by-4.0
+          --output-directory build/public_fixture_discovery
+          --timeout 300
 
-          timeout 30s openssl s_client \
-            -starttls ftp \
-            -connect massive-ftp.ucsd.edu:21 \
-            -servername massive-ftp.ucsd.edu \
-            -showcerts \
-            </dev/null >"$TLS_DIR/handshake.txt" 2>&1 || true
+      - name: Display frozen metadata candidate
+        run: cat build/public_fixture_discovery/fixture_report.json
 
-          awk -v out="$TLS_DIR/certs" '
-            /-----BEGIN CERTIFICATE-----/ {n++; file=sprintf("%s/cert-%02d.pem", out, n)}
-            file != "" {print > file}
-            /-----END CERTIFICATE-----/ {close(file); file=""}
-          ' "$TLS_DIR/handshake.txt"
-
-          LEAF="$TLS_DIR/certs/cert-01.pem"
-          test -s "$LEAF"
-
-          openssl x509 -in "$LEAF" -noout \
-            -subject -issuer -serial -dates -fingerprint -sha256 \
-            >"$TLS_DIR/leaf-summary.txt"
-          openssl x509 -in "$LEAF" -noout -ext subjectAltName \
-            >"$TLS_DIR/leaf-san.txt"
-          openssl x509 -in "$LEAF" -noout -ext authorityInfoAccess \
-            >"$TLS_DIR/leaf-aia.txt"
-          openssl x509 -in "$LEAF" -noout -text >"$TLS_DIR/leaf-full.txt"
-
-          grep -q 'DNS:massive-ftp.ucsd.edu' "$TLS_DIR/leaf-san.txt"
-
-          AIA_URL="$(sed -n 's/^[[:space:]]*CA Issuers - URI://p' \
-            "$TLS_DIR/leaf-aia.txt" | head -n 1)"
-          test -n "$AIA_URL"
-          printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-aia-url.txt"
-          printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-fetch-url.txt"
-
-          # The HTTP transport is not trusted by itself. The issuer is retained only
-          # when it cryptographically verifies the leaf through the system root store.
-          curl --fail --show-error --silent --location \
-            --user-agent 'mzmine-open-offline-certificate-discovery/1' \
-            --connect-timeout 20 --max-time 60 \
-            --output "$TLS_DIR/issuer.download" "$AIA_URL"
-
-          # Sectigo serves this AIA object as DER. Detect PEM from its marker;
-          # otherwise perform an explicit DER -> PEM normalization.
-          if grep -a -q -- '-----BEGIN CERTIFICATE-----' "$TLS_DIR/issuer.download"; then
-            openssl x509 -in "$TLS_DIR/issuer.download" -out "$TLS_DIR/issuer.pem"
-          else
-            openssl x509 -inform DER -in "$TLS_DIR/issuer.download" \
-              -out "$TLS_DIR/issuer.pem"
-          fi
-          grep -q -- '-----BEGIN CERTIFICATE-----' "$TLS_DIR/issuer.pem"
-
-          openssl x509 -in "$TLS_DIR/issuer.pem" -noout \
-            -subject -issuer -serial -dates -fingerprint -sha256 \
-            >"$TLS_DIR/issuer-summary.txt"
-
-          openssl verify \
-            -CAfile /etc/ssl/certs/ca-certificates.crt \
-            -untrusted "$TLS_DIR/issuer.pem" \
-            "$LEAF" | tee "$TLS_DIR/verify-result.txt"
-          grep -q ': OK$' "$TLS_DIR/verify-result.txt"
-
-      - name: Download through verified explicit FTPS
-        shell: bash
-        run: |
-          set -euo pipefail
-          timeout 300s python scripts/discover_massive_fixture.py \
-            --task f6100fda35654d40a061715874c699b0 \
-            --accession MSV000101091 \
-            --listed-path "f.MSV000101091/ccms_peak/Metabolomics raw data/Method1_Set277193_100_BOST-06537.mzML" \
-            --expected-size 16978328 \
-            --output-directory build/public_fixture_discovery \
-            --timeout 180 \
-            --ftps-issuer-ca-file build/public_fixture_discovery/tls/issuer.pem
-
-      - name: Add certificate fingerprint to frozen report
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import re
-          from pathlib import Path
-
-          output = Path("build/public_fixture_discovery")
-          report_path = output / "fixture_report.json"
-          report = json.loads(report_path.read_text(encoding="utf-8"))
-          fingerprint_line = next(
-              line for line in (output / "tls" / "leaf-summary.txt").read_text().splitlines()
-              if "Fingerprint=" in line
-          )
-          fingerprint = fingerprint_line.split("=", 1)[1].replace(":", "").strip().lower()
-          if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
-              raise SystemExit("Invalid leaf certificate SHA-256 fingerprint")
-          if report.get("size_bytes") != 16978328:
-              raise SystemExit("Unexpected fixture byte size")
-          if not re.fullmatch(r"[0-9a-f]{64}", str(report.get("sha256", ""))):
-              raise SystemExit("Invalid fixture SHA-256")
-          report["leaf_certificate_sha256"] = fingerprint
-          report["certificate_chain_verification"] = (
-              "leaf SAN checked; AIA issuer verified to operating-system roots"
-          )
-          report_path.write_text(
-              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-          )
-          print(json.dumps(report, indent=2, sort_keys=True))
-          PY
-
-      - name: Remove downloaded dataset bytes and temporary certificates
+      - name: Remove downloaded dataset bytes
         if: always()
-        run: |
-          rm -rf build/public_fixture_discovery/download
-          rm -rf build/public_fixture_discovery/tls/certs
-          rm -f build/public_fixture_discovery/tls/issuer.download
-          rm -f build/public_fixture_discovery/tls/issuer.pem
-          rm -f build/public_fixture_discovery/tls/leaf-full.txt
+        run: rm -rf build/public_fixture_discovery/download
 
-      - name: Upload metadata and TLS diagnostics only
+      - name: Upload metadata report only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: MSV000101091-fixture-report
+          name: zenodo-14001110-Banane-30ngmL-001-report
           path: |
             build/public_fixture_discovery/fixture_resolution.json
             build/public_fixture_discovery/fixture_report.json
-            build/public_fixture_discovery/tls/handshake.txt
-            build/public_fixture_discovery/tls/leaf-summary.txt
-            build/public_fixture_discovery/tls/leaf-san.txt
-            build/public_fixture_discovery/tls/leaf-aia.txt
-            build/public_fixture_discovery/tls/issuer-aia-url.txt
-            build/public_fixture_discovery/tls/issuer-fetch-url.txt
-            build/public_fixture_discovery/tls/issuer-summary.txt
-            build/public_fixture_discovery/tls/verify-result.txt
           if-no-files-found: warn
           retention-days: 14
