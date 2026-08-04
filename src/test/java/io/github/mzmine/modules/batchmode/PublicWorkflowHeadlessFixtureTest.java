@@ -160,7 +160,7 @@ class PublicWorkflowHeadlessFixtureTest {
     transformer.transform(new DOMSource(outputDocument), new StreamResult(BATCH_FILE.toFile()));
 
     final Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 2);
+    report.put("schema_version", 3);
     report.put("source_settings", settings.toString());
     report.put("source_mzmine_version", sourceRoot.getAttribute("mzmine_version"));
     report.put("replicate_mzml", replicate.toString());
@@ -171,13 +171,18 @@ class PublicWorkflowHeadlessFixtureTest {
     report.put("total_batch_step_count", queue.size());
     report.put("parameter_validation_mode",
         "BatchTask runtime validation after dynamic BATCH_LAST raw-data/feature-list binding");
+    report.put("generated_batch_validation",
+        "Secure reparse, batch root, exactly twelve direct batchstep elements");
     report.put("workflow_executed", false);
     report.put("steps", stepInventory);
     MAPPER.writeValue(FIXTURE_REPORT.toFile(), report);
 
     assertEquals(12, queue.size());
     assertTrue(Files.isRegularFile(BATCH_FILE));
-    assertTrue(Files.size(BATCH_FILE) > Files.size(settings));
+    assertTrue(Files.size(BATCH_FILE) > 1024, "Generated batch is unexpectedly small");
+    final Document reparsedBatch = secureFactory().newDocumentBuilder().parse(BATCH_FILE.toFile());
+    assertEquals("batch", reparsedBatch.getDocumentElement().getTagName());
+    assertEquals(12, directChildren(reparsedBatch.getDocumentElement(), "batchstep").size());
     assertTrue(Files.isRegularFile(FIXTURE_REPORT));
     assertFalse(Files.exists(CSV_FILE), "CSV must be created only by the child CLI process");
   }
