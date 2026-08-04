@@ -5,6 +5,7 @@
 package io.github.mzmine.modules.dataprocessing.featdet_roimcr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -15,6 +16,7 @@ import io.github.mzmine.datamodel.PolarityType;
 import io.github.mzmine.datamodel.RawDataFile;
 import io.github.mzmine.datamodel.Scan;
 import io.github.mzmine.datamodel.features.FeatureList;
+import io.github.mzmine.datamodel.features.types.annotations.CommentType;
 import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.parameters.parametertypes.selectors.ScanSelection;
 import io.github.mzmine.parameters.parametertypes.tolerances.MZTolerance;
@@ -64,6 +66,13 @@ class RoiMcrTaskIntegrationTest {
     result.getRows().forEach(row -> {
       assertTrue(row.getAverageMZ() >= 100 && row.getAverageMZ() <= 300);
       assertEquals(1, row.getNumberOfFeatures());
+      final String comment = row.get(CommentType.class);
+      assertNotNull(comment);
+      assertTrue(comment.contains("restart_stability="));
+      assertTrue(comment.contains("perturbation_stability="));
+      assertTrue(comment.contains("perturbation_support="));
+      assertTrue(comment.contains("rank_agreement="));
+      assertTrue(comment.contains("confidence=stable"));
     });
   }
 
