@@ -53,27 +53,33 @@ class WorkerThread extends Thread {
   @Override
   public void run() {
     final Task actualTask = wrappedTask.getActualTask();
+    TaskStatus finalStatus = actualTask.getStatus();
+    String finalErrorMessage = actualTask.getErrorMessage();
 
     try {
       logger.info("Starting processing of task " + actualTask.getTaskDescription());
       actualTask.run();
+      finalStatus = actualTask.getStatus();
+      finalErrorMessage = actualTask.getErrorMessage();
 
-      if (actualTask.getStatus() == TaskStatus.ERROR) {
-        final String errorMessage = normalizedErrorMessage(actualTask.getErrorMessage());
-        ensureErrorState(actualTask, errorMessage);
-        logger.severe("Error of task " + actualTask.getTaskDescription() + ": " + errorMessage);
+      if (finalStatus == TaskStatus.ERROR) {
+        finalErrorMessage = normalizedErrorMessage(finalErrorMessage);
+        ensureErrorState(actualTask, finalErrorMessage);
+        logger.severe(
+            "Error of task " + actualTask.getTaskDescription() + ": " + finalErrorMessage);
       } else {
         logger.info("Processing of task " + actualTask.getTaskDescription() + " done, status "
-            + actualTask.getStatus());
+            + finalStatus);
       }
     } catch (Throwable throwable) {
-      final String errorMessage = "Unhandled exception in task "
+      finalStatus = TaskStatus.ERROR;
+      finalErrorMessage = "Unhandled exception in task "
           + actualTask.getTaskDescription() + ": " + throwable;
-      ensureErrorState(actualTask, errorMessage);
-      logger.log(Level.SEVERE, errorMessage, throwable);
+      ensureErrorState(actualTask, finalErrorMessage);
+      logger.log(Level.SEVERE, finalErrorMessage, throwable);
     } finally {
-      // Preserve description/status/error while releasing references held by the completed task.
-      wrappedTask.removeTaskReference();
+      // Preserve explicit diagnostics even for Task implementations that do not extend AbstractTask.
+      wrappedTask.removeTaskReference(finalStatus, finalErrorMessage);
       finished = true;
     }
   }
