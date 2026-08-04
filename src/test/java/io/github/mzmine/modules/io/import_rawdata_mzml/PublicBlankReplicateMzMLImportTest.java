@@ -52,8 +52,17 @@ class PublicBlankReplicateMzMLImportTest {
 
   private static final String REPLICATE_ENVIRONMENT = "OPEN_OFFLINE_PUBLIC_MZML_REPLICATE_2";
   private static final String BLANK_ENVIRONMENT = "OPEN_OFFLINE_PUBLIC_MZML_BLANK_1";
-  private static final long REPLICATE_EXPECTED_SIZE = 86_540_418L;
-  private static final long BLANK_EXPECTED_SIZE = 86_111_130L;
+  private static final double NUMERIC_TOLERANCE = 0.00001;
+
+  private static final ExpectedImport REPLICATE_EXPECTED = new ExpectedImport(
+      86_540_418L, 5_232, 4_085, 1_147,
+      0.77683449f, 27.61018562f, 50.00003433, 749.99383545,
+      6_410_718L, 2_703);
+
+  private static final ExpectedImport BLANK_EXPECTED = new ExpectedImport(
+      86_111_130L, 5_207, 4_112, 1_095,
+      0.77685571f, 27.61053658f, 50.00000000, 749.99389648,
+      6_401_519L, 3_513);
 
   @Test
   void importsAndCharacterizesBlankAndSecondReplicate() throws Exception {
@@ -65,25 +74,15 @@ class PublicBlankReplicateMzMLImportTest {
         () -> "Set " + BLANK_ENVIRONMENT + "=<path> to run the public blank test");
 
     final ImportSummary replicate = importAndSummarize(
-        "Banane_30ngmL_002", Path.of(replicatePath), REPLICATE_EXPECTED_SIZE);
+        "Banane_30ngmL_002", Path.of(replicatePath), REPLICATE_EXPECTED.sizeBytes());
     final ImportSummary blank = importAndSummarize(
-        "blank_001", Path.of(blankPath), BLANK_EXPECTED_SIZE);
+        "blank_001", Path.of(blankPath), BLANK_EXPECTED.sizeBytes());
 
-    assertArrayEquals(new int[]{1, 2}, replicate.msLevels());
-    assertArrayEquals(new int[]{1, 2}, blank.msLevels());
-    assertEquals(List.of(PolarityType.NEGATIVE), replicate.polarities());
-    assertEquals(List.of(PolarityType.NEGATIVE), blank.polarities());
-    assertEquals(MassSpectrumType.CENTROIDED, replicate.spectrumType());
-    assertEquals(MassSpectrumType.CENTROIDED, blank.spectrumType());
-    assertTrue(replicate.scanCount() > 5_000);
-    assertTrue(blank.scanCount() > 5_000);
-    assertTrue(replicate.totalDataPoints() > 1_000_000L);
-    assertTrue(blank.totalDataPoints() > 1_000_000L);
-    assertFalse(replicate.containsEmptyScans());
-    assertFalse(blank.containsEmptyScans());
+    assertMatchesFrozenReference(replicate, REPLICATE_EXPECTED);
+    assertMatchesFrozenReference(blank, BLANK_EXPECTED);
 
-    // These runs belong to the same acquisition series and should have compatible metadata.
-    assertEquals(replicate.msLevels().length, blank.msLevels().length);
+    // These runs belong to the same acquisition series and must remain metadata-compatible.
+    assertArrayEquals(replicate.msLevels(), blank.msLevels());
     assertEquals(replicate.polarities(), blank.polarities());
     assertEquals(replicate.spectrumType(), blank.spectrumType());
     assertTrue(Math.abs(replicate.rtLower() - blank.rtLower()) < 0.1f);
@@ -98,6 +97,25 @@ class PublicBlankReplicateMzMLImportTest {
 
     System.out.println("PUBLIC_BLANK_REPLICATE_IMPORT_SUMMARY=" + output.toAbsolutePath());
     System.out.println(Files.readString(output));
+  }
+
+  private static void assertMatchesFrozenReference(final ImportSummary actual,
+      final ExpectedImport expected) {
+    assertEquals(expected.sizeBytes(), actual.sizeBytes());
+    assertEquals(expected.scanCount(), actual.scanCount());
+    assertArrayEquals(new int[]{1, 2}, actual.msLevels());
+    assertEquals(expected.ms1Scans(), actual.ms1Scans());
+    assertEquals(expected.ms2Scans(), actual.ms2Scans());
+    assertEquals(expected.rtLower(), actual.rtLower(), NUMERIC_TOLERANCE);
+    assertEquals(expected.rtUpper(), actual.rtUpper(), NUMERIC_TOLERANCE);
+    assertEquals(expected.mzLower(), actual.mzLower(), NUMERIC_TOLERANCE);
+    assertEquals(expected.mzUpper(), actual.mzUpper(), NUMERIC_TOLERANCE);
+    assertEquals(List.of(PolarityType.NEGATIVE), actual.polarities());
+    assertEquals(MassSpectrumType.CENTROIDED, actual.spectrumType());
+    assertEquals(expected.totalDataPoints(), actual.totalDataPoints());
+    assertEquals(expected.maxRawDataPoints(), actual.maxRawDataPoints());
+    assertFalse(actual.containsEmptyScans());
+    assertFalse(actual.containsZeroOrNegativeIntensity());
   }
 
   private static ImportSummary importAndSummarize(final String label, final Path configuredPath,
@@ -169,6 +187,11 @@ class PublicBlankReplicateMzMLImportTest {
 
   private static String escape(final String value) {
     return value.replace("\\", "\\\\").replace("\"", "\\\"");
+  }
+
+  private record ExpectedImport(long sizeBytes, int scanCount, int ms1Scans, int ms2Scans,
+                                float rtLower, float rtUpper, double mzLower, double mzUpper,
+                                long totalDataPoints, int maxRawDataPoints) {
   }
 
   private record ImportSummary(String label, Path fixturePath, long sizeBytes,
