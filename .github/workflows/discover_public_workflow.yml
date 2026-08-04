@@ -1,4 +1,4 @@
-name: Discover Public MZmine Workflow
+name: Validate Public MZmine Workflow
 
 on:
   push:
@@ -8,20 +8,29 @@ on:
     branches:
       - open-offline-main
     paths:
-      - scripts/discover_zenodo_fixture.py
+      - scripts/fetch_public_test_data.py
       - scripts/inspect_mzmine_settings.py
+      - scripts/validate_mzmine_settings_inventory.py
+      - scripts/tests/test_mzmine_settings_inventory.py
       - .github/workflows/discover_public_workflow.yml
-      - datasets/public_validation_manifest.json
+      - datasets/public_workflow_manifest.json
+      - datasets/expected/zenodo_14000687_mzmine_settings_inventory.json
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  discover-public-settings:
-    name: Freeze and inventory MZmine processing settings
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  validate-public-settings:
+    name: Validate published MZmine settings (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
 
     steps:
       - name: Check out source
@@ -32,38 +41,74 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve, verify, and download public settings XML
+      - name: Validate all public manifests and offline policy tests
+        shell: bash
+        run: |
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --validate
+          python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Download and cryptographically verify published settings XML
+        shell: bash
         run: >-
-          python scripts/discover_zenodo_fixture.py
-          --record 14000687
-          --file "MZmine processing settings.xml"
-          --required-license cc-by-4.0
-          --output-directory build/public_workflow_discovery
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_workflow_manifest.json
+          --dataset zenodo-14000687-mzmine-processing-settings
+          --output-dir build/public_validation_data
           --timeout 120
+          --retries 3
+
+      - name: Verify frozen XML again before inspection
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_workflow_manifest.json
+          --dataset zenodo-14000687-mzmine-processing-settings
+          --output-dir build/public_validation_data
+          --verify-existing
 
       - name: Inspect XML structure without executing it
+        shell: bash
         run: >-
           python scripts/inspect_mzmine_settings.py
-          "build/public_workflow_discovery/download/MZmine processing settings.xml"
-          --output build/public_workflow_discovery/mzmine_settings_inventory.json
+          "build/public_validation_data/zenodo/14000687/MZmine processing settings.xml"
+          --output build/public_workflow_validation/mzmine_settings_inventory.json
 
-      - name: Display frozen reports
+      - name: Validate exact structure and public module source availability
+        shell: bash
+        run: >-
+          python scripts/validate_mzmine_settings_inventory.py
+          --inventory build/public_workflow_validation/mzmine_settings_inventory.json
+          --expected datasets/expected/zenodo_14000687_mzmine_settings_inventory.json
+          --repo-root .
+          --output build/public_workflow_validation/mzmine_settings_compatibility.json
+
+      - name: Display validated reports
+        shell: bash
         run: |
-          cat build/public_workflow_discovery/fixture_report.json
-          cat build/public_workflow_discovery/mzmine_settings_inventory.json
+          cat build/public_workflow_validation/mzmine_settings_inventory.json
+          cat build/public_workflow_validation/mzmine_settings_compatibility.json
 
-      - name: Remove downloaded XML bytes
-        if: always()
-        run: rm -rf build/public_workflow_discovery/download
+      - name: Remove downloaded XML bytes on Linux
+        if: always() && runner.os != 'Windows'
+        run: rm -rf build/public_validation_data
 
-      - name: Upload metadata and inventory only
+      - name: Remove downloaded XML bytes on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path build/public_validation_data) {
+            Remove-Item -Recurse -Force build/public_validation_data
+          }
+
+      - name: Upload inventory and compatibility reports only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zenodo-14000687-mzmine-settings-inventory
+          name: zenodo-14000687-mzmine-settings-${{ matrix.os }}
           path: |
-            build/public_workflow_discovery/fixture_resolution.json
-            build/public_workflow_discovery/fixture_report.json
-            build/public_workflow_discovery/mzmine_settings_inventory.json
+            build/public_workflow_validation/mzmine_settings_inventory.json
+            build/public_workflow_validation/mzmine_settings_compatibility.json
           if-no-files-found: warn
           retention-days: 14
