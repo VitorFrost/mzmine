@@ -3,8 +3,8 @@
 
 This is a maintainer discovery tool, not the normal dataset downloader. It asks the official
 MassiveServlet for the dataset FTP root, derives the exact file URL from a path displayed by the
-MassIVE files page, downloads to a temporary location, verifies the expected size, computes SHA-256,
-and writes a JSON report. Dataset bytes are never added to Git by this script.
+MassIVE files page, writes a resolution report, and optionally downloads the file to verify size and
+calculate SHA-256. Dataset bytes are never added to Git by this script.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import re
 import shutil
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -89,6 +90,11 @@ def sha256_file(path: Path) -> str:
   return digest.hexdigest()
 
 
+def write_json(path: Path, value: dict[str, Any]) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def download_and_hash(url: str, expected_size: int, destination: Path, timeout: int) -> str:
   destination.parent.mkdir(parents=True, exist_ok=True)
   temp_path: Path | None = None
@@ -125,6 +131,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
   parser.add_argument("--expected-size", required=True, type=int)
   parser.add_argument("--output-directory", type=Path, required=True)
   parser.add_argument("--timeout", type=int, default=180)
+  parser.add_argument(
+      "--resolve-only",
+      action="store_true",
+      help="Write fixture_resolution.json and exit before downloading dataset bytes",
+  )
   return parser.parse_args(argv)
 
 
@@ -155,12 +166,9 @@ def main(argv: list[str] | None = None) -> int:
 
     ftp_root = validate_public_ftp_root(info.get("ftp"), accession)
     file_url = derive_file_url(ftp_root, accession, args.listed_path)
-
     output_directory = args.output_directory.resolve()
-    downloaded_path = output_directory / "download" / Path(args.listed_path).name
-    digest = download_and_hash(file_url, args.expected_size, downloaded_path, args.timeout)
 
-    report = {
+    resolution = {
         "schema_version": 1,
         "accession": accession,
         "task": task,
@@ -172,17 +180,27 @@ def main(argv: list[str] | None = None) -> int:
         "listed_path": args.listed_path,
         "ftp_root": ftp_root,
         "resolved_file_url": file_url,
+        "expected_size_bytes": args.expected_size,
+    }
+    write_json(output_directory / "fixture_resolution.json", resolution)
+    print(json.dumps(resolution, indent=2, sort_keys=True), flush=True)
+
+    if args.resolve_only:
+      return 0
+
+    downloaded_path = output_directory / "download" / Path(args.listed_path).name
+    digest = download_and_hash(file_url, args.expected_size, downloaded_path, args.timeout)
+    report = {
+        **resolution,
         "size_bytes": args.expected_size,
         "sha256": digest,
         "local_file": str(downloaded_path),
     }
-    report_path = output_directory / "fixture_report.json"
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(report, indent=2, sort_keys=True))
+    write_json(output_directory / "fixture_report.json", report)
+    print(json.dumps(report, indent=2, sort_keys=True), flush=True)
     return 0
   except (DiscoveryError, OSError, urllib.error.URLError) as exc:
-    print(f"ERROR: {exc}", file=sys.stderr)
+    print(f"ERROR: {exc}", file=sys.stderr, flush=True)
     return 2
 
 
