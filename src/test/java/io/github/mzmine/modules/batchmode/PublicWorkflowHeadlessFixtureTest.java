@@ -69,7 +69,9 @@ import org.xml.sax.SAXException;
  *
  * <p>The test only prepares artifacts. Processing happens in a separate MZmine CLI process so a
  * module failure, process exit, timeout or unexpected authentication/network output can be recorded
- * independently by the runner.</p>
+ * independently by the runner. Parameters that select the last raw-data files or feature lists are
+ * intentionally not checked during fixture generation: {@link BatchTask} binds those dynamic values
+ * after the preceding batch step and then performs the authoritative parameter check.</p>
  */
 class PublicWorkflowHeadlessFixtureTest {
 
@@ -134,10 +136,6 @@ class PublicWorkflowHeadlessFixtureTest {
           () -> moduleClassName + " unexpectedly has no ParameterSet class");
       final ParameterSet parameterSet = parameterSetClass.getDeclaredConstructor().newInstance();
       parameterSet.loadValuesFromXML(publishedStep);
-      final List<String> parameterErrors = new ArrayList<>();
-      assertTrue(parameterSet.checkParameterValues(parameterErrors),
-          () -> "Invalid published values before execution for " + moduleClassName + ": "
-              + parameterErrors);
 
       addStep(queue, module, parameterSet);
       stepInventory.add(stepRecord(index + 2, "published", moduleClassName, module.getName(),
@@ -162,7 +160,7 @@ class PublicWorkflowHeadlessFixtureTest {
     transformer.transform(new DOMSource(outputDocument), new StreamResult(BATCH_FILE.toFile()));
 
     final Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 1);
+    report.put("schema_version", 2);
     report.put("source_settings", settings.toString());
     report.put("source_mzmine_version", sourceRoot.getAttribute("mzmine_version"));
     report.put("replicate_mzml", replicate.toString());
@@ -171,6 +169,8 @@ class PublicWorkflowHeadlessFixtureTest {
     report.put("expected_csv", CSV_FILE.toString());
     report.put("published_step_count", publishedSteps.size());
     report.put("total_batch_step_count", queue.size());
+    report.put("parameter_validation_mode",
+        "BatchTask runtime validation after dynamic BATCH_LAST raw-data/feature-list binding");
     report.put("workflow_executed", false);
     report.put("steps", stepInventory);
     MAPPER.writeValue(FIXTURE_REPORT.toFile(), report);
