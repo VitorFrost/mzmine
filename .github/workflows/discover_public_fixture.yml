@@ -1,0 +1,51 @@
+name: Discover Public MassIVE Fixture
+
+on:
+  push:
+    branches:
+      - agent/public-small-lcms-fixture
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover-small-lcms-fixture:
+    name: Resolve and hash MSV000101091 fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve official FTP URL, download, and hash
+        run: >-
+          python scripts/discover_massive_fixture.py
+          --task f6100fda35654d40a061715874c699b0
+          --accession MSV000101091
+          --listed-path "f.MSV000101091/ccms_peak/Metabolomics raw data/Method1_Set277193_100_BOST-06537.mzML"
+          --expected-size 16978328
+          --output-directory build/public_fixture_discovery
+          --timeout 300
+
+      - name: Display frozen metadata candidate
+        run: cat build/public_fixture_discovery/fixture_report.json
+
+      - name: Remove downloaded dataset bytes
+        if: always()
+        run: rm -rf build/public_fixture_discovery/download
+
+      - name: Upload metadata report only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MSV000101091-fixture-report
+          path: build/public_fixture_discovery/fixture_report.json
+          if-no-files-found: warn
+          retention-days: 14
