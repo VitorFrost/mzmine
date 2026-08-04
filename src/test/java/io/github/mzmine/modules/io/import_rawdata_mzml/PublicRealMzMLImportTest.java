@@ -49,13 +49,15 @@ import org.junit.jupiter.api.Test;
 class PublicRealMzMLImportTest {
 
   private static final String FIXTURE_PROPERTY = "openOffline.publicMzML";
+  private static final String FIXTURE_ENVIRONMENT = "OPEN_OFFLINE_PUBLIC_MZML";
   private static final long EXPECTED_SIZE = 87_090_777L;
 
   @Test
   void importsAndCharacterizesFrozenPublicMzML() throws Exception {
-    final String configuredPath = System.getProperty(FIXTURE_PROPERTY);
+    final String configuredPath = resolveFixturePath();
     Assumptions.assumeTrue(configuredPath != null && !configuredPath.isBlank(),
-        () -> "Set -D" + FIXTURE_PROPERTY + "=<path> to run the public real-data test");
+        () -> "Set -D" + FIXTURE_PROPERTY + "=<path> or " + FIXTURE_ENVIRONMENT
+            + "=<path> to run the public real-data test");
 
     final Path fixturePath = Path.of(configuredPath).toAbsolutePath().normalize();
     final File fixture = fixturePath.toFile();
@@ -104,6 +106,14 @@ class PublicRealMzMLImportTest {
     } finally {
       raw.close();
     }
+  }
+
+  private static String resolveFixturePath() {
+    final String property = System.getProperty(FIXTURE_PROPERTY);
+    if (property != null && !property.isBlank()) {
+      return property;
+    }
+    return System.getenv(FIXTURE_ENVIRONMENT);
   }
 
   private static String createSummary(final RawDataFile raw, final Path fixturePath,
