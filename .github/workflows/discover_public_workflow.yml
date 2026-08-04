@@ -1,0 +1,69 @@
+name: Discover Public MZmine Workflow
+
+on:
+  push:
+    branches:
+      - agent/public-workflow-settings
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - scripts/discover_zenodo_fixture.py
+      - scripts/inspect_mzmine_settings.py
+      - .github/workflows/discover_public_workflow.yml
+      - datasets/public_validation_manifest.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover-public-settings:
+    name: Freeze and inventory MZmine processing settings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve, verify, and download public settings XML
+        run: >-
+          python scripts/discover_zenodo_fixture.py
+          --record 14000687
+          --file "MZmine processing settings.xml"
+          --required-license cc-by-4.0
+          --output-directory build/public_workflow_discovery
+          --timeout 120
+
+      - name: Inspect XML structure without executing it
+        run: >-
+          python scripts/inspect_mzmine_settings.py
+          "build/public_workflow_discovery/download/MZmine processing settings.xml"
+          --output build/public_workflow_discovery/mzmine_settings_inventory.json
+
+      - name: Display frozen reports
+        run: |
+          cat build/public_workflow_discovery/fixture_report.json
+          cat build/public_workflow_discovery/mzmine_settings_inventory.json
+
+      - name: Remove downloaded XML bytes
+        if: always()
+        run: rm -rf build/public_workflow_discovery/download
+
+      - name: Upload metadata and inventory only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenodo-14000687-mzmine-settings-inventory
+          path: |
+            build/public_workflow_discovery/fixture_resolution.json
+            build/public_workflow_discovery/fixture_report.json
+            build/public_workflow_discovery/mzmine_settings_inventory.json
+          if-no-files-found: warn
+          retention-days: 14
