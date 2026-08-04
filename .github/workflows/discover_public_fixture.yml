@@ -20,9 +20,15 @@ permissions:
 
 jobs:
   validate-real-lcms-fixture:
-    name: Import frozen Zenodo LC-MS fixture
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Import frozen Zenodo LC-MS fixture (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
 
     steps:
       - name: Check out source
@@ -43,11 +49,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Validate manifest and policy tests
+        shell: bash
         run: |
           python scripts/fetch_public_test_data.py --validate
           python -m unittest discover -s scripts/tests -p "test_*.py" -v
 
       - name: Download and verify approved fixture
+        shell: bash
         run: >-
           python scripts/fetch_public_test_data.py
           --dataset zenodo-14001110-banane-30ngml-001
@@ -56,13 +64,15 @@ jobs:
           --retries 3
 
       - name: Verify frozen fixture again before Java import
+        shell: bash
         run: >-
           python scripts/fetch_public_test_data.py
           --dataset zenodo-14001110-banane-30ngml-001
           --output-dir build/public_validation_data
           --verify-existing
 
-      - name: Import and characterize real public mzML
+      - name: Import and characterize real public mzML on Linux
+        if: runner.os != 'Windows'
         env:
           OPEN_OFFLINE_PUBLIC_MZML: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/Banane_30ngmL_001.mzML
         run: >-
@@ -71,18 +81,43 @@ jobs:
           --no-daemon
           --stacktrace
 
-      - name: Display import summary
+      - name: Import and characterize real public mzML on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OPEN_OFFLINE_PUBLIC_MZML: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\Banane_30ngmL_001.mzML
+        run: >-
+          .\gradlew.bat test
+          --tests io.github.mzmine.modules.io.import_rawdata_mzml.PublicRealMzMLImportTest
+          --no-daemon
+          --stacktrace
+
+      - name: Display import summary on Linux
+        if: runner.os != 'Windows'
         run: cat build/public_validation/zenodo_14001110_Banane_30ngmL_001_import_summary.json
 
-      - name: Remove downloaded dataset bytes
-        if: always()
+      - name: Display import summary on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Get-Content build/public_validation/zenodo_14001110_Banane_30ngmL_001_import_summary.json
+
+      - name: Remove downloaded dataset bytes on Linux
+        if: always() && runner.os != 'Windows'
         run: rm -rf build/public_validation_data
+
+      - name: Remove downloaded dataset bytes on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path build/public_validation_data) {
+            Remove-Item -Recurse -Force build/public_validation_data
+          }
 
       - name: Upload public import report only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zenodo-14001110-Banane-30ngmL-001-import-report
+          name: zenodo-14001110-Banane-30ngmL-001-import-report-${{ matrix.os }}
           path: |
             build/public_validation/zenodo_14001110_Banane_30ngmL_001_import_summary.json
             build/reports/tests/test/
