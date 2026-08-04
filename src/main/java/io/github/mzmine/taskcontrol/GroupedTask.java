@@ -34,6 +34,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -58,6 +59,7 @@ public final class GroupedTask extends AbstractTask {
   private final TaskPriority taskPriority;
   private final AtomicBoolean started = new AtomicBoolean();
   private final AtomicBoolean cancellationRequested = new AtomicBoolean();
+  private final AtomicIntegerArray childCancellationSent;
   private final AtomicReferenceArray<ChildResult> childResults;
   private final List<IndexedFuture> submittedFutures = new CopyOnWriteArrayList<>();
   private final Object stateLock = new Object();
@@ -86,6 +88,7 @@ public final class GroupedTask extends AbstractTask {
     }
     this.maximumConcurrency = maximumConcurrency;
     this.taskPriority = Objects.requireNonNull(taskPriority, "taskPriority");
+    childCancellationSent = new AtomicIntegerArray(this.children.size());
     childResults = new AtomicReferenceArray<>(this.children.size());
   }
 
@@ -169,8 +172,10 @@ public final class GroupedTask extends AbstractTask {
       setStatus(TaskStatus.CANCELED);
     }
 
-    for (final Task child : children) {
-      safeCancel(child);
+    for (int index = 0; index < children.size(); index++) {
+      cancelChildOnce(index);
+      setResultIfAbsent(index,
+          ChildResult.canceled(index, safeDescription(children.get(index))));
     }
     for (final IndexedFuture indexedFuture : submittedFutures) {
       indexedFuture.future().cancel(true);
@@ -185,6 +190,7 @@ public final class GroupedTask extends AbstractTask {
   private void submitChildren() {
     for (int index = 0; index < children.size(); index++) {
       if (cancellationRequested.get()) {
+        cancelChildOnce(index);
         setResultIfAbsent(index,
             ChildResult.canceled(index, safeDescription(children.get(index))));
         continue;
@@ -198,7 +204,7 @@ public final class GroupedTask extends AbstractTask {
       } catch (RejectedExecutionException rejected) {
         final ChildResult result;
         if (cancellationRequested.get() || executor.isShutdown()) {
-          safeCancel(child);
+          cancelChildOnce(childIndex);
           result = ChildResult.canceled(childIndex, safeDescription(child));
         } else {
           result = ChildResult.error(childIndex, safeDescription(child),
@@ -217,7 +223,7 @@ public final class GroupedTask extends AbstractTask {
         try {
           result = indexedFuture.future().get();
         } catch (CancellationException canceled) {
-          safeCancel(children.get(childIndex));
+          cancelChildOnce(childIndex);
           result = ChildResult.canceled(childIndex, safeDescription(children.get(childIndex)));
         } catch (InterruptedException interrupted) {
           Thread.currentThread().interrupt();
@@ -236,7 +242,7 @@ public final class GroupedTask extends AbstractTask {
   private ChildResult executeChild(final int index, final Task child) {
     final String childDescription = safeDescription(child);
     if (cancellationRequested.get()) {
-      safeCancel(child);
+      cancelChildOnce(index);
       return recordResult(ChildResult.canceled(index, childDescription));
     }
 
@@ -260,7 +266,7 @@ public final class GroupedTask extends AbstractTask {
       return recordResult(ChildResult.error(index, childDescription, errorMessage));
     } catch (Throwable throwable) {
       if (cancellationRequested.get() || Thread.currentThread().isInterrupted()) {
-        safeCancel(child);
+        cancelChildOnce(index);
         return recordResult(ChildResult.canceled(index, childDescription));
       }
 
@@ -307,7 +313,7 @@ public final class GroupedTask extends AbstractTask {
       if (result == null) {
         final Task child = children.get(index);
         if (cancellationRequested.get()) {
-          safeCancel(child);
+          cancelChildOnce(index);
           result = ChildResult.canceled(index, safeDescription(child));
         } else {
           result = ChildResult.error(index, safeDescription(child),
@@ -353,6 +359,12 @@ public final class GroupedTask extends AbstractTask {
   private void setResultIfAbsent(final int index, final ChildResult result) {
     if (index >= 0 && index < childResults.length()) {
       childResults.compareAndSet(index, null, result);
+    }
+  }
+
+  private void cancelChildOnce(final int index) {
+    if (childCancellationSent.compareAndSet(index, 0, 1)) {
+      safeCancel(children.get(index));
     }
   }
 
