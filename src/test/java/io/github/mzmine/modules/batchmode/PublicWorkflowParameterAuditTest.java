@@ -22,6 +22,7 @@
 package io.github.mzmine.modules.batchmode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,6 +30,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import io.github.mzmine.modules.MZmineModule;
 import io.github.mzmine.parameters.Parameter;
 import io.github.mzmine.parameters.ParameterSet;
+import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -49,6 +51,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  * Audits a frozen, allowlisted public MZmine batch without running any processing module.
@@ -81,7 +85,9 @@ class PublicWorkflowParameterAuditTest {
     assertTrue(Files.isRegularFile(settingsPath), () -> "Missing settings XML: " + settingsPath);
 
     final ExpectedWorkflow expected = readExpectedWorkflow(EXPECTED_INVENTORY);
-    final Document sourceDocument = secureFactory().newDocumentBuilder().parse(settingsPath.toFile());
+    final DocumentBuilderFactory sourceFactory = secureFactory();
+    assertRejectsDoctype(sourceFactory);
+    final Document sourceDocument = sourceFactory.newDocumentBuilder().parse(settingsPath.toFile());
     final Element root = sourceDocument.getDocumentElement();
     assertEquals("batch", root.getTagName());
 
@@ -238,13 +244,39 @@ class PublicWorkflowParameterAuditTest {
     factory.setNamespaceAware(false);
     factory.setXIncludeAware(false);
     factory.setExpandEntityReferences(false);
+
+    // These features are mandatory. Failure to enable any of them aborts the audit.
     factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
     factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
     factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
     factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-    factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-    factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+
+    // Some older XML parser implementations bundled with the open code do not recognize the
+    // newer JAXP access-control attributes. They are defense in depth only; the mandatory features
+    // above and the explicit DOCTYPE rejection self-test remain fail-closed.
+    setOptionalSecurityAttribute(factory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
+    setOptionalSecurityAttribute(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
     return factory;
+  }
+
+  private static void setOptionalSecurityAttribute(final DocumentBuilderFactory factory,
+      final String attribute, final String value) {
+    try {
+      factory.setAttribute(attribute, value);
+    } catch (IllegalArgumentException unsupportedByLegacyParser) {
+      // Intentionally tolerated only because mandatory entity/DTD features are enabled and tested.
+    }
+  }
+
+  private static void assertRejectsDoctype(final DocumentBuilderFactory factory) {
+    final String maliciousXml = """
+        <?xml version="1.0"?>
+        <!DOCTYPE batch [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+        <batch>&xxe;</batch>
+        """;
+    assertThrows(SAXException.class,
+        () -> factory.newDocumentBuilder().parse(new InputSource(new StringReader(maliciousXml))),
+        "Secure XML factory must reject DOCTYPE declarations before auditing public settings");
   }
 
   private static List<Element> directChildren(final Element parent, final String tagName) {
