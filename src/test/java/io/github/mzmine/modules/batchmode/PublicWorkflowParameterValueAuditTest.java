@@ -68,9 +68,10 @@ import org.xml.sax.SAXException;
  * <p>The comparison ignores indentation, line endings, Boolean case and numerically equivalent
  * decimal formatting. Repeated entries are deduplicated only for an XML parameter explicitly named
  * {@code Chemical elements}, because that parameter represents a set and the published XML contains
- * the same element sequence repeatedly. Every other text value remains literal and order-sensitive.
- * The published value is saved once, loaded into a fresh clone and saved again so source migration
- * remains distinct from serializer instability.</p>
+ * the same element sequence repeatedly. A slash inserted before a Windows drive letter is normalized
+ * only in {@code current_file} elements, reflecting the same path on Unix and Windows. Every other
+ * text value remains literal and order-sensitive. The published value is saved once, loaded into a
+ * fresh clone and saved again so source migration remains distinct from serializer instability.</p>
  */
 class PublicWorkflowParameterValueAuditTest {
 
@@ -85,6 +86,8 @@ class PublicWorkflowParameterValueAuditTest {
   private static final Pattern DECIMAL = Pattern.compile(
       "[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?");
   private static final Pattern ELEMENT_SYMBOL = Pattern.compile("[A-Z][a-z]?");
+  private static final Pattern WINDOWS_DRIVE_WITH_LEADING_SLASH = Pattern.compile(
+      "^/([A-Za-z]:[\\\\/].*)$");
 
   private static final ObjectMapper MAPPER = new ObjectMapper()
       .enable(SerializationFeature.INDENT_OUTPUT)
@@ -213,11 +216,13 @@ class PublicWorkflowParameterValueAuditTest {
     }
 
     final Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 2);
+    report.put("schema_version", 3);
     report.put("comparison_policy",
-        "Element paths, attributes and direct values; numeric formatting, Boolean case and repeated Chemical elements set entries normalized");
+        "Element paths, attributes and direct values; numeric formatting, Boolean case, repeated Chemical elements set entries and leading slash before Windows drive in current_file normalized");
     report.put("chemical_element_normalization_scope",
         "Only parameter elements explicitly named Chemical elements; first-seen order preserved");
+    report.put("windows_drive_normalization_scope",
+        "Only current_file elements matching /<drive>:/...; path body and separators remain significant");
     report.put("source_file", settingsPath.toString());
     report.put("source_sha256", expected.sourceSha256());
     report.put("published_mzmine_version", root.getAttribute("mzmine_version"));
@@ -259,6 +264,18 @@ class PublicWorkflowParameterValueAuditTest {
         canonicalScalar("H,C,N,O,S", path));
     assertEquals("H,C,N,O,S,H,C,N,O,S",
         canonicalScalar("H,C,N,O,S,H,C,N,O,S", "/parameter[@name='Free text']"));
+  }
+
+  @Test
+  void canonicalizesOnlyWindowsDrivePrefixInCurrentFileElements() {
+    final String currentFilePath =
+        "/parameter[@name='Output netCDF filename (optional)']/current_file";
+    assertEquals("C:\\Program Files\\MZmine",
+        canonicalScalar("/C:\\Program Files\\MZmine", currentFilePath));
+    assertEquals("C:\\Program Files\\MZmine",
+        canonicalScalar("C:\\Program Files\\MZmine", currentFilePath));
+    assertEquals("/C:\\Program Files\\MZmine",
+        canonicalScalar("/C:\\Program Files\\MZmine", "/parameter[@name='Free text']"));
   }
 
   private static Element saveParameter(final Parameter<?> parameter, final String canonicalName)
@@ -327,6 +344,12 @@ class PublicWorkflowParameterValueAuditTest {
         : rawValue.replace("\r\n", "\n").replace('\r', '\n').trim();
     if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
       return value.toLowerCase(Locale.ROOT);
+    }
+    if (path.endsWith("/current_file")) {
+      final var driveMatch = WINDOWS_DRIVE_WITH_LEADING_SLASH.matcher(value);
+      if (driveMatch.matches()) {
+        return driveMatch.group(1);
+      }
     }
     if (path.endsWith(CHEMICAL_ELEMENTS_PATH_SUFFIX)) {
       final String canonicalElements = canonicalChemicalElements(value);
