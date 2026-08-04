@@ -45,6 +45,71 @@ jobs:
       - name: Display resolved metadata
         run: cat build/public_fixture_discovery/fixture_resolution.json
 
+      - name: Diagnose and verify FTPS certificate chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          TLS_DIR="build/public_fixture_discovery/tls"
+          mkdir -p "$TLS_DIR/certs"
+
+          # Capture exactly what the public FTPS endpoint presents. Failure of the
+          # normal system-chain verification is expected when an intermediate is omitted.
+          timeout 30s openssl s_client \
+            -starttls ftp \
+            -connect massive-ftp.ucsd.edu:21 \
+            -servername massive-ftp.ucsd.edu \
+            -showcerts \
+            </dev/null >"$TLS_DIR/handshake.txt" 2>&1 || true
+
+          awk -v out="$TLS_DIR/certs" '
+            /-----BEGIN CERTIFICATE-----/ {n++; file=sprintf("%s/cert-%02d.pem", out, n)}
+            file != "" {print > file}
+            /-----END CERTIFICATE-----/ {close(file); file=""}
+          ' "$TLS_DIR/handshake.txt"
+
+          LEAF="$TLS_DIR/certs/cert-01.pem"
+          test -s "$LEAF"
+
+          openssl x509 -in "$LEAF" -noout \
+            -subject -issuer -serial -dates -fingerprint -sha256 \
+            -ext subjectAltName -ext authorityInfoAccess \
+            >"$TLS_DIR/leaf-summary.txt"
+          openssl x509 -in "$LEAF" -noout -text >"$TLS_DIR/leaf-full.txt"
+
+          grep -q 'DNS:massive-ftp.ucsd.edu' "$TLS_DIR/leaf-summary.txt"
+
+          AIA_URL="$(openssl x509 -in "$LEAF" -noout -text \
+            | sed -n 's/^[[:space:]]*CA Issuers - URI://p' \
+            | head -n 1)"
+          test -n "$AIA_URL"
+          printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-aia-url.txt"
+
+          # An HTTP AIA URL is acceptable only because the downloaded certificate is
+          # cryptographically verified against the system trust store before use.
+          curl --fail --show-error --silent --location \
+            --connect-timeout 20 --max-time 60 \
+            --output "$TLS_DIR/issuer.download" "$AIA_URL"
+
+          if openssl x509 -in "$TLS_DIR/issuer.download" -noout >/dev/null 2>&1; then
+            cp "$TLS_DIR/issuer.download" "$TLS_DIR/issuer.pem"
+          else
+            openssl x509 -inform DER -in "$TLS_DIR/issuer.download" \
+              -out "$TLS_DIR/issuer.pem"
+          fi
+
+          openssl x509 -in "$TLS_DIR/issuer.pem" -noout \
+            -subject -issuer -serial -dates -fingerprint -sha256 \
+            >"$TLS_DIR/issuer-summary.txt"
+
+          openssl verify \
+            -CAfile /etc/ssl/certs/ca-certificates.crt \
+            -untrusted "$TLS_DIR/issuer.pem" \
+            "$LEAF" | tee "$TLS_DIR/verify-result.txt"
+          grep -q ': OK$' "$TLS_DIR/verify-result.txt"
+
+          cat /etc/ssl/certs/ca-certificates.crt "$TLS_DIR/issuer.pem" \
+            >"$TLS_DIR/verified-ca-bundle.pem"
+
       - name: Download through verified explicit FTPS
         shell: bash
         run: |
@@ -60,6 +125,7 @@ jobs:
             --ssl-reqd \
             --ftp-ssl \
             --ftp-pasv \
+            --cacert build/public_fixture_discovery/tls/verified-ca-bundle.pem \
             --user 'anonymous:mzmine-open-offline@example.invalid' \
             --connect-timeout 30 \
             --max-time 240 \
@@ -86,7 +152,12 @@ jobs:
           report.update({
               "size_bytes": source.stat().st_size,
               "sha256": digest,
-              "transfer_transport": "curl explicit FTPS with certificate verification",
+              "transfer_transport": "explicit FTPS with AIA intermediate verified to system roots",
+              "leaf_certificate_sha256": next(
+                  line.split("=", 1)[1].replace(":", "").strip().lower()
+                  for line in (output / "tls" / "leaf-summary.txt").read_text().splitlines()
+                  if line.startswith("sha256 Fingerprint=") or line.startswith("SHA256 Fingerprint=")
+              ),
               "local_file": str(source.resolve()),
           })
           (output / "fixture_report.json").write_text(
@@ -95,11 +166,13 @@ jobs:
           print(json.dumps(report, indent=2, sort_keys=True))
           PY
 
-      - name: Remove downloaded dataset bytes
+      - name: Remove downloaded dataset bytes and temporary CA bundle
         if: always()
-        run: rm -rf build/public_fixture_discovery/download
+        run: |
+          rm -rf build/public_fixture_discovery/download
+          rm -f build/public_fixture_discovery/tls/verified-ca-bundle.pem
 
-      - name: Upload metadata reports only
+      - name: Upload metadata and TLS diagnostics only
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -107,5 +180,10 @@ jobs:
           path: |
             build/public_fixture_discovery/fixture_resolution.json
             build/public_fixture_discovery/fixture_report.json
+            build/public_fixture_discovery/tls/handshake.txt
+            build/public_fixture_discovery/tls/leaf-summary.txt
+            build/public_fixture_discovery/tls/issuer-aia-url.txt
+            build/public_fixture_discovery/tls/issuer-summary.txt
+            build/public_fixture_discovery/tls/verify-result.txt
           if-no-files-found: warn
           retention-days: 14
