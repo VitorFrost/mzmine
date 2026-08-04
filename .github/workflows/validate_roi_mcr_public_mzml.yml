@@ -69,18 +69,18 @@ jobs:
             --output-dir build/public_validation_data \
             --verify-existing
 
-      - name: Execute ROI-MCR public validation on Linux
+      - name: Execute ROI-MCR public validations on Linux
         if: runner.os != 'Windows'
         env:
           OPEN_OFFLINE_PUBLIC_MZML_REPLICATE_2: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/Banane_30ngmL_002.mzML
           OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/blank_001.mzML
         run: >-
           ./gradlew test
-          --tests io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublicMzmlValidationTest
+          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*ValidationTest"
           --no-daemon
           --stacktrace
 
-      - name: Execute ROI-MCR public validation on Windows
+      - name: Execute ROI-MCR public validations on Windows
         if: runner.os == 'Windows'
         shell: pwsh
         env:
@@ -88,18 +88,29 @@ jobs:
           OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\blank_001.mzML
         run: >-
           .\gradlew.bat test
-          --tests io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublicMzmlValidationTest
+          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*ValidationTest"
           --no-daemon
           --stacktrace
 
-      - name: Display validation report on Linux
-        if: always() && runner.os != 'Windows' && hashFiles('build/roi_mcr_public_validation/roi_mcr_public_validation.json') != ''
-        run: cat build/roi_mcr_public_validation/roi_mcr_public_validation.json
+      - name: Display validation reports on Linux
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          for report in build/roi_mcr_public_validation/*.json; do
+            if [[ -f "$report" ]]; then
+              echo "===== $report ====="
+              cat "$report"
+            fi
+          done
 
-      - name: Display validation report on Windows
-        if: always() && runner.os == 'Windows' && hashFiles('build/roi_mcr_public_validation/roi_mcr_public_validation.json') != ''
+      - name: Display validation reports on Windows
+        if: always() && runner.os == 'Windows'
         shell: pwsh
-        run: Get-Content build/roi_mcr_public_validation/roi_mcr_public_validation.json
+        run: |
+          Get-ChildItem build/roi_mcr_public_validation/*.json -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "===== $($_.FullName) ====="
+            Get-Content $_.FullName
+          }
 
       - name: Remove public dataset bytes on Linux
         if: always() && runner.os != 'Windows'
@@ -119,7 +130,7 @@ jobs:
         with:
           name: roi-mcr-public-validation-${{ matrix.os }}
           path: |
-            build/roi_mcr_public_validation/roi_mcr_public_validation.json
+            build/roi_mcr_public_validation/*.json
             build/reports/tests/test/
             build/test-results/test/
           if-no-files-found: warn
