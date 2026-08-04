@@ -56,16 +56,30 @@ def _dataset(manifest: dict[str, Any], dataset_id: str) -> dict[str, Any]:
   dataset = matches[0]
   if dataset.get("download_enabled") is not True:
     raise GenerationError(f"dataset is not approved for governed download/use: {dataset_id}")
-  expected_size = dataset.get("expected_size_bytes")
-  expected_sha = dataset.get("sha256")
-  relative_path = dataset.get("destination_relative_path")
+
+  files = dataset.get("files")
+  if not isinstance(files, list) or len(files) != 1 or not isinstance(files[0], dict):
+    raise GenerationError(
+        f"this first-stage producer requires exactly one governed file: {dataset_id}"
+    )
+  file_record = files[0]
+  expected_size = file_record.get("expected_size_bytes")
+  expected_sha = file_record.get("sha256")
+  relative_path = file_record.get("relative_path")
   if not isinstance(expected_size, int) or expected_size < 1:
-    raise GenerationError(f"dataset has no frozen positive byte size: {dataset_id}")
-  if not isinstance(expected_sha, str) or len(expected_sha) != 64:
-    raise GenerationError(f"dataset has no frozen SHA-256: {dataset_id}")
+    raise GenerationError(f"dataset file has no frozen positive byte size: {dataset_id}")
+  if (not isinstance(expected_sha, str) or len(expected_sha) != 64
+      or any(character not in "0123456789abcdef" for character in expected_sha)):
+    raise GenerationError(f"dataset file has no frozen lowercase SHA-256: {dataset_id}")
   if not isinstance(relative_path, str) or not relative_path:
-    raise GenerationError(f"dataset has no destination_relative_path: {dataset_id}")
-  return dataset
+    raise GenerationError(f"dataset file has no relative_path: {dataset_id}")
+
+  return {
+      "dataset_id": dataset_id,
+      "relative_path": relative_path,
+      "expected_size_bytes": expected_size,
+      "sha256": expected_sha,
+  }
 
 
 def _sha256(path: Path) -> str:
@@ -119,8 +133,8 @@ def build_environment(
   environment.update({
       "MZMINE_PARITY_INPUT": str(args.input.resolve()),
       "MZMINE_PARITY_OUTPUT": str(args.output.resolve()),
-      "MZMINE_PARITY_DATASET_ID": args.dataset_id,
-      "MZMINE_PARITY_RELATIVE_PATH": dataset["destination_relative_path"],
+      "MZMINE_PARITY_DATASET_ID": dataset["dataset_id"],
+      "MZMINE_PARITY_RELATIVE_PATH": dataset["relative_path"],
       "MZMINE_PARITY_EXPECTED_SHA256": input_sha,
       "MZMINE_PARITY_REPOSITORY": args.producer_repository,
       "MZMINE_PARITY_REF": args.producer_ref,
@@ -175,12 +189,13 @@ def main() -> int:
 
   print(json.dumps({
       "command": command,
-      "dataset_id": args.dataset_id,
+      "dataset_id": dataset["dataset_id"],
       "input": str(args.input.resolve()),
       "input_sha256": input_sha,
       "output": str(args.output.resolve()),
       "producer_commit": args.producer_commit,
       "producer_ref": args.producer_ref,
+      "relative_path": dataset["relative_path"],
   }, indent=2, sort_keys=True))
   if args.dry_run:
     return 0
@@ -206,8 +221,11 @@ def main() -> int:
   except ReportError as exc:
     print(f"Generated report is invalid: {exc}", file=sys.stderr)
     return 2
-  if report["input"]["dataset_id"] != args.dataset_id:
+  if report["input"]["dataset_id"] != dataset["dataset_id"]:
     print("Generated report contains the wrong dataset id", file=sys.stderr)
+    return 2
+  if report["input"]["relative_path"] != dataset["relative_path"]:
+    print("Generated report contains the wrong relative input path", file=sys.stderr)
     return 2
   if report["input"]["sha256"] != input_sha:
     print("Generated report contains the wrong input SHA-256", file=sys.stderr)
