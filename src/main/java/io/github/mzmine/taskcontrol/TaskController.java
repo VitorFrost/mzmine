@@ -28,15 +28,94 @@ package io.github.mzmine.taskcontrol;
 import io.github.mzmine.taskcontrol.impl.TaskQueue;
 import io.github.mzmine.taskcontrol.impl.WrappedTask;
 import java.util.Objects;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Controls asynchronous and deterministic synchronous execution of MZmine tasks.
  *
- * <p>The synchronous API is a selective Java 20-compatible adaptation of the public MIT-licensed
- * controller revision at commit {@code 001a0c3c672d09a141faa56b42c7c145246f9dd6}. The legacy
- * MZmine 3.9 queue API is retained for compatibility.</p>
+ * <p>The synchronous API and executor factories are selective Java 20-compatible adaptations of
+ * the public MIT-licensed controller revisions at commits
+ * {@code 9977c66c754c04f8b06572787aa6708ad210519f} and
+ * {@code 001a0c3c672d09a141faa56b42c7c145246f9dd6}. The legacy MZmine 3.9 queue API
+ * remains unchanged.</p>
  */
 public interface TaskController {
+
+  int HIGH_PRIORITY_THREAD_PRIORITY = 8;
+  long CACHED_THREAD_KEEP_ALIVE_SECONDS = 120L;
+
+  /**
+   * Create a fixed-size executor backed only by Java platform threads.
+   *
+   * <p>The factory deliberately uses {@code new Thread(...)} rather than virtual-thread APIs, so it
+   * remains compatible with Java 20. Fixed-pool threads are non-daemon, use normal priority, and
+   * receive deterministic names within the returned executor.</p>
+   *
+   * @param numThreads exact number of worker threads, greater than zero
+   * @param threadNamePrefix non-blank prefix used for deterministic thread names
+   * @return a fixed-size platform-thread executor
+   */
+  static ThreadPoolExecutor createFixedThreadPool(final int numThreads,
+      final String threadNamePrefix) {
+    requirePositiveThreadCount(numThreads, "numThreads");
+    final ThreadFactory threadFactory = createPlatformThreadFactory(threadNamePrefix,
+        Thread.NORM_PRIORITY, false);
+    return new ThreadPoolExecutor(numThreads, numThreads, 0L, TimeUnit.MILLISECONDS,
+        new LinkedBlockingQueue<>(), threadFactory, new ThreadPoolExecutor.AbortPolicy());
+  }
+
+  /**
+   * Create a bounded cached executor for short, high-priority subtasks.
+   *
+   * <p>This is a Java 20-compatible adaptation of the public MZmine factory. It keeps no idle core
+   * threads, creates at most {@code maxNumThreads} platform threads, expires idle threads after
+   * 120 seconds, and rejects work once all workers are occupied because the hand-off queue stores
+   * no pending tasks.</p>
+   *
+   * @param maxNumThreads strict maximum number of concurrent workers, greater than zero
+   * @return a bounded cached high-priority platform-thread executor
+   */
+  static ThreadPoolExecutor createCachedHighPriorityThreadPool(final int maxNumThreads) {
+    requirePositiveThreadCount(maxNumThreads, "maxNumThreads");
+    final ThreadFactory threadFactory = createPlatformThreadFactory(
+        "MZmine high-priority task", HIGH_PRIORITY_THREAD_PRIORITY, true);
+    return new ThreadPoolExecutor(0, maxNumThreads, CACHED_THREAD_KEEP_ALIVE_SECONDS,
+        TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory,
+        new ThreadPoolExecutor.AbortPolicy());
+  }
+
+  private static ThreadFactory createPlatformThreadFactory(final String threadNamePrefix,
+      final int priority, final boolean daemon) {
+    Objects.requireNonNull(threadNamePrefix, "threadNamePrefix");
+    if (threadNamePrefix.isBlank()) {
+      throw new IllegalArgumentException("threadNamePrefix must not be blank");
+    }
+    if (priority < Thread.MIN_PRIORITY || priority > Thread.MAX_PRIORITY) {
+      throw new IllegalArgumentException("priority must be between Thread.MIN_PRIORITY and "
+          + "Thread.MAX_PRIORITY");
+    }
+
+    final AtomicInteger threadNumber = new AtomicInteger();
+    return task -> {
+      final Thread thread = new Thread(task,
+          threadNamePrefix + "-" + threadNumber.incrementAndGet());
+      thread.setDaemon(daemon);
+      thread.setPriority(priority);
+      return thread;
+    };
+  }
+
+  private static void requirePositiveThreadCount(final int threadCount,
+      final String parameterName) {
+    if (threadCount <= 0) {
+      throw new IllegalArgumentException(parameterName + " must be greater than zero");
+    }
+  }
 
   void addTask(Task task);
 
