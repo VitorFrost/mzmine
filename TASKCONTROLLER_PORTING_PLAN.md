@@ -1,147 +1,182 @@
-# TaskController selective port plan
+# TaskController selective port record
 
-## Decision
+## Status
 
-Do not cherry-pick the 2024 TaskController work directly into the MZmine 3.9 base.
+**Completed for the declared Java 20 open-offline scope.**
 
-The public commits are useful as MIT-licensed design and implementation history, but they already
-assume a partially modularized codebase and, in places, Java 21 features. The initial open-offline
-branch deliberately remains on the MZmine 3.9 Java 20 toolchain until the baseline build, headless
-startup, and mzML processing tests are stable.
+The task-controller work was implemented in four reviewed phases while preserving the mzmine 3.9
+global scheduler, deterministic scientific output, and independence from proprietary services.
+
+This file now records what was implemented and what remains intentionally outside the milestone. The
+active roadmap has moved to functional LC-MS parity with public mzmine v4.0.8.
+
+## Original decision
+
+The later task-controller history was not cherry-picked wholesale into the monolithic mzmine 3.9
+base. Public MIT-licensed commits were used selectively because the later code assumed:
+
+- a partially modularized source tree;
+- Java 21 features in some intermediate states;
+- interfaces and infrastructure not present in the open-offline fork;
+- unrelated GUI, importer, and service changes.
+
+The implementation therefore retained Java 20, adapted only the required public ideas, and introduced
+one original fork-local grouped-task capability with independently documented semantics.
 
 ## Public provenance
 
-| Order | Commit | Purpose | Initial decision |
-|---|---|---|---|
-| 1 | `7ec9902b5f283f0607f6983192f756decf417d1f` | Start new task controller, add synchronous task execution and internal thread-pool tasks | Port selected controller APIs only; do not cherry-pick broad GUI, batch, and importer changes |
-| 2 | PR `#1628`, merge `ae38a04744a8c3e3a240b84c0c6acc0aa06db467` | Thread-pool controller and observable task view | Use as design reference; defer TaskView/MVCI refactor |
-| 3 | `9977c66c754c04f8b06572787aa6708ad210519f` | Enforce single TaskController initialization | Port only together with the correction below |
-| 4 | `001a0c3c672d09a141faa56b42c7c145246f9dd6` | Decouple task controller from JavaFX | High-priority architectural goal; adapt to the monolithic 3.9 source tree |
-| 5 | `25f4bc146a8869cd382861183a0ae8be0df7ad32` | Correct missing return in `TaskService.init` | Mandatory if the initialization service is ported |
-| 6 | `7ad3c265dcf71e4844518cda171f243a28718921` | Fix task-listener threading and subtask error propagation | Port after the controller API is stable |
+| Public reference | Purpose used by the fork | Result |
+|---|---|---|
+| `7ec9902b5f283f0607f6983192f756decf417d1f` | Early synchronous/controller direction | Inspected; not copied wholesale because it represented an intermediate API state |
+| PR `#1628`, merge `ae38a04744a8c3e3a240b84c0c6acc0aa06db467` | Thread-pool/grouped-task design context | Design reference only; no broad TaskView/MVCI port |
+| `9977c66c754c04f8b06572787aa6708ad210519f` | Controller service and executor context | Selectively adapted for Java 20 |
+| `001a0c3c672d09a141faa56b42c7c145246f9dd6` | Synchronous execution and JavaFX decoupling | Selectively adapted to the monolithic tree |
+| `25f4bc146a8869cd382861183a0ae8be0df7ad32` | Correct one-time service initialization behavior | Included in local facade behavior |
+| `7ad3c265dcf71e4844518cda171f243a28718921` | Listener/subtask error-propagation context | Used as review context; fork behavior covered by dedicated tests |
 
-All listed code must retain its original MIT license header and provenance in the commit message.
+All adapted source retains compatible licensing and records local modifications in its PR history.
 
-## Compatibility constraints
+## Completed phases
 
-### Java version
+### Phase 0 — deterministic baseline
 
-The first new-controller commit contains Java 21-specific constructs, including virtual-thread
-executors and string templates. These cannot be copied unchanged into the current Java 20 build.
+Completed before controller behavior was changed:
 
-For the first milestone:
+- Java 20 Linux and Windows tests;
+- independence audit;
+- no-login headless startup;
+- deterministic synthetic LC-MS processing;
+- deterministic XML batch execution;
+- comparison with an untouched mzmine 3.9.0 checkout.
 
-- keep Java 20;
-- use fixed/cached platform-thread executors;
-- avoid `Executors.newVirtualThreadPerTaskExecutor()`;
-- replace `STR.` string templates with ordinary concatenation or formatting;
-- evaluate Java 21 only in a separate branch after deterministic LC-MS processing is established.
+### Phase 1 / 2A — local service and synchronous adapters
 
-### Source-tree architecture
+Implemented:
 
-MZmine 3.9 is largely monolithic. The later commits refer to separate projects such as
-`:taskcontroller`, `:memory-management`, `:utils`, and `:javafx-framework`.
+- local `TaskService` with explicit initialization and access;
+- `getSubmittedTaskQueue()` alias for the existing queue;
+- `runTaskOnThisThreadBlocking(Task)`;
+- deterministic sequential blocking execution for multiple tasks;
+- existing asynchronous `addTask` / `addTasks` behavior preserved;
+- duplicate-execution race prevented by assigning the blocking wrapper before queue exposure.
 
-The first port should preserve the existing package names inside the monolithic source tree. Module
-extraction is a later refactor and must not be combined with behavior changes.
+Validated:
 
-### GUI separation
+- access before initialization;
+- valid initialization and duplicate registration;
+- empty, null, single, and multiple task input;
+- ordering;
+- success, error, and cancellation propagation;
+- at-most-once execution.
 
-The controller must not depend on JavaFX for scheduling or state transitions. GUI updates should
-subscribe to controller state and marshal changes onto the JavaFX thread at the view boundary.
+Implementation PR: `#13`.
 
-Headless processing must remain fully usable without initializing JavaFX.
+### Phase 2B — bounded Java 20 executors
 
-## Phased implementation
+Implemented:
 
-### Phase 0 — baseline
+- fixed-size platform-thread executor factory;
+- bounded cached high-priority platform-thread executor factory;
+- deterministic worker names;
+- explicit normal/high-priority policy;
+- daemon/non-daemon policy;
+- strict saturation rejection;
+- shutdown and termination behavior.
 
-Required before controller changes:
+Explicitly excluded:
 
-- Linux and Windows build pass on Java 20;
-- independence audit passes;
-- `--version` headless startup smoke test passes;
-- no startup telemetry, update check, login, or license validation occurs.
+- virtual threads;
+- Java 21 string templates or syntax;
+- replacement of the legacy global scheduler.
 
-### Phase 1 — local service facade
+Implementation PR: `#23`.
 
-Add a small `TaskService` facade in the existing `io.github.mzmine.taskcontrol` package:
+### Phase 2C — JavaFX/Desktop decoupling
 
-- explicit one-time initialization;
-- `getController()` fails clearly before initialization;
-- no user, license, feature, or authorization service;
-- unit tests for first initialization, duplicate initialization, and access before initialization.
+Implemented:
 
-Do not change batch execution behavior in this phase.
+- removal of direct desktop refresh calls from `TaskControllerImpl`;
+- task-table refresh retained at the GUI/view boundary;
+- removal of `MZmineCore.runLater` from wrapped-task priority changes;
+- removal of desktop error dialogs from worker execution;
+- controlled and unhandled failures preserved through status, error text, logs, and compact
+  `FinishedTask` records;
+- coverage for `AbstractTask` and direct `Task` implementations;
+- source-boundary regression tests against GUI scheduling dependencies.
 
-### Phase 2 — controller API adapters
+Implementation PR: `#24`.
 
-Add selected APIs while preserving existing behavior:
+### Phase 2D — original fork-local `GroupedTask`
 
-- `getSubmittedTaskQueue()` as a clearer alias for the existing queue;
-- synchronous `runTaskOnThisThread(...)` for deterministic batch orchestration;
-- fixed and cached executor factories using platform threads;
-- explicit cancellation and exception propagation;
-- no virtual threads yet.
+Implemented as an original capability, not an upstream compatibility layer:
 
-Add tests for:
+- one parent `Task` owning an immutable ordered child list;
+- strict configurable concurrency ceiling using Java 20 platform threads;
+- at-most-once parent execution;
+- equal-weight deterministic arithmetic-mean progress;
+- terminal child states treated as completed work for progress;
+- independent children allowed to settle after another child fails;
+- multiple errors aggregated in child-index order;
+- unhandled child exceptions converted to explicit diagnostics;
+- non-terminal child returns rejected;
+- parent cancellation propagated to children, futures, and executor shutdown;
+- atomic per-child cancellation guard;
+- cancel-before-run prevents child execution;
+- no JavaFX, Desktop, account, license, telemetry, or `io.mzio` dependency.
 
-- priority ordering;
-- cancellation;
-- exception propagation;
-- task status transitions;
-- controller shutdown;
-- deterministic completion of a fixed task set.
+The first full cancellation test exposed duplicate child cancellation signals. The failure reproduced on
+Linux and Windows and was corrected with an atomic per-child guard plus immediate canceled-result
+recording. Dedicated cancel-before-run coverage was added.
 
-### Phase 3 — JavaFX decoupling
+Design record: `docs/milestones/PHASE_2D_GROUPED_TASK.md`.
+Implementation PR: `#25`.
 
-Adapt the intent of commit `001a0c3...`:
+## Final acceptance result
 
-- controller and wrapped tasks must not import GUI services or JavaFX thread helpers;
-- errors are recorded and logged in the task model;
-- the GUI observes task changes and decides how to display them;
-- headless errors remain available through logs and exit status.
+The completed milestone passed:
 
-### Phase 4 — batch integration
+1. independence and prohibited-dependency audit;
+2. public-data fail-closed policy;
+3. Java 20 Ubuntu tests;
+4. Java 20 Windows tests;
+5. focused task-controller and grouped-task tests;
+6. no-login headless startup;
+7. deterministic headless scientific batch;
+8. equality with untouched mzmine 3.9.0;
+9. no proprietary dependency or reconstructed account/license behavior.
 
-Only after controller tests pass:
+## Current architectural classification
 
-- run batch-step subtasks through the synchronous controller adapter;
-- preserve the existing MZmine 3.9 batch XML format;
-- compare outputs against the unmodified 3.9 baseline;
-- reject any change in feature count, m/z, retention time, area, height, or exported values unless
-  explicitly explained and approved.
+The task layer is **Adapted**, not “Equivalent” in the binary/API sense.
 
-### Phase 5 — optional grouped thread-pool task
+Reasons:
 
-Introduce a platform-thread-only grouped task inspired by PR `#1628`:
+- the 3.9 global scheduler remains intentionally preserved;
+- the fork uses Java 20 platform threads rather than later Java 21 facilities;
+- `GroupedTask` is a fork-local API with independently defined semantics;
+- no source or binary compatibility promise is made for proprietary or unavailable later components.
 
-- one parent task represents many subtasks;
-- progress equals completed subtasks divided by total subtasks;
-- parent cancellation cancels pending children;
-- child error propagates to the parent;
-- executor always shuts down cleanly.
+This classification is sufficient for the declared LC-MS scientific objective because behavior is
+explicit, deterministic, headless-capable, and tested.
 
-A Java 21 virtual-thread implementation, if desired, belongs in a later optional module.
+## Remaining task-related work belongs to later milestones
 
-## Explicitly deferred work
+The following are not unfinished parts of this port; they are separate integration or release gates:
+
+- adopt `GroupedTask` in a scientific module only after a workflow demonstrates need;
+- run cancellation and recovery under realistic file-processing load;
+- validate one-, two-, and N-thread scientific determinism;
+- verify no abandoned threads or mapped files after repeated batches;
+- define CLI exit codes and structured run reports;
+- test packaged GUI/headless execution from clean Windows and Linux artifacts;
+- evaluate Java 21 only in a dedicated future migration milestone.
+
+## Deliberate non-goals
 
 - observable/MVCI TaskView replacement;
 - broad GUI task-manager redesign;
-- batch timing/log formatting changes unrelated to correctness;
-- importer refactors bundled into PR `#1628`;
-- Java 21 migration;
-- modular Gradle project extraction;
-- any account, authentication, licensing, or feature-entitlement behavior.
-
-## Acceptance criteria
-
-The controller port is acceptable only when:
-
-1. the open-offline audit still passes;
-2. Linux and Windows CI pass;
-3. headless startup passes without network or authentication output;
-4. a reference mzML batch produces deterministic output;
-5. output matches the MZmine 3.9 baseline within explicitly defined tolerances;
-6. every ported source change records its upstream MIT commit;
-7. no proprietary JAR or decompiled implementation is used.
+- modular Gradle extraction;
+- virtual-thread migration;
+- global scheduler replacement without a measured scientific need;
+- account, authentication, licensing, or feature-entitlement behavior;
+- reconstruction of unavailable `io.mzio` task-controller APIs.

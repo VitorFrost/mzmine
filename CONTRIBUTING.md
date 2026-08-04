@@ -1,104 +1,204 @@
 # Contributing to mzmine Open Offline Fork
 
-Thank you for contributing to this community fork. This document explains our standards for keeping the fork clean, reproducible, and fully open-source.
+This repository is an independent fork with a strict scientific, legal, and reproducibility boundary.
+Contributions are welcome when they preserve that boundary and add evidence, not only code.
 
 ## Core rules
 
-1. **No `io.mzio` dependencies.** Never add any dependency on `io.mzio:*` artifacts — binary or source.
-2. **No login gates.** Any code path that checks authentication, requires an account, or contacts a remote server for authorization must be replaced with a local no-op stub.
-3. **No closed binaries in the repository.** Do not commit `.jar` files from `io.mzio`. The `local-repo/io/mzio/` directory must not exist in `open-offline-main`.
-4. **MIT license headers.** Every Java file must carry the MIT license header. Use the IntelliJ template in `license_header_intellij.xml`.
+1. **No proprietary `io.mzio` dependencies or binaries.**
+2. **No authentication or license bypasses.** Do not emulate a successful login, fabricate an
+   entitled user, patch an authorization result, or reconstruct proprietary behavior.
+3. **No decompiled or binary-derived implementation.** Use public source with compatible licensing or
+   write a new implementation from independently documented requirements.
+4. **No silent scientific adaptation.** Renamed, transformed, unsupported, deprecated, or intentionally
+   changed parameters must be classified and tested.
+5. **No ungoverned dataset bytes.** Public files require explicit license, immutable source, exact size,
+   SHA-256, and cleanup policy before CI download is enabled.
+6. **Preserve MIT license headers and provenance.**
+7. **Keep behavior and architecture changes separable.** Do not combine a broad source-tree refactor
+   with an unreviewed scientific algorithm change.
 
----
+## Handling later upstream source
 
-## How to port a commit from upstream (mzmine 4.x)
+Before selectively adapting a later public upstream file or commit:
 
-Before porting any file or commit from upstream:
+1. verify that the exact source state is publicly available;
+2. verify the license header and repository license at that state;
+3. record the upstream tag/commit SHA and original path;
+4. identify all dependencies on proprietary or unavailable components;
+5. decide whether to omit the integration, define an original local interface, or classify it out of
+   scope;
+6. document Java-version and monolithic-source-tree adaptations;
+7. add tests that cover the scientific or infrastructure behavior being adopted;
+8. preserve the frozen 3.9 regression unless an intentional, reviewed difference is recorded.
 
-1. Confirm the file carries the MIT license header in the upstream commit.
-2. Record the upstream commit SHA, original path, and any modifications in the [Porting Record](#porting-record-template) section of `OPEN_OFFLINE_FORK.md`.
-3. Remove any `import io.mzio.*` statements from the ported file.
-4. Replace any usage of `io.mzio` services with their stub equivalents (see [Stub API](#stub-api) below).
-5. Add or update tests for the ported functionality.
+Do not copy implementation details from a proprietary JAR, decompiled class, stack trace reverse
+engineering, or binary API experiment intended to reproduce closed behavior.
 
----
+## Local open interfaces
 
-## Stub API
+A later public source file may refer to an unavailable service. The fork does **not** use a generic
+“always authenticated” stub policy.
 
-The following stub modules replace the closed `io.mzio` binaries. They always behave as if a local, anonymous user is logged in with full access — no network call is ever made.
+An acceptable local replacement must:
 
-### `UserService` (replaces `io.mzio:user-client` and `io.mzio:user-management`)
+- have independently documented semantics;
+- expose only behavior required by the open scientific workflow;
+- avoid account, entitlement, and license concepts unless the fork has a legitimate independent use
+  for them;
+- make no mandatory network call;
+- fail explicitly when unsupported;
+- have unit and headless tests;
+- be described as fork-local rather than upstream-compatible unless compatibility is demonstrated.
 
-Stub location: `src/main/java/io/github/mzmine/users/`
-
-```java
-// Example usage — replaces CurrentUserService.getUser()
-UserService.getLocalUser(); // returns a LocalOfflineUser instance, always non-null
-
-// Example usage — replaces AuthRequiredEvent checks
-UserService.isAuthenticated(); // always returns true in the offline fork
-```
-
-The stub must never:
-- make a network call;
-- throw an exception when offline;
-- block the UI thread waiting for a server response.
-
-### `GlobalEventsStub` (replaces `io.mzio:global-events`)
-
-A no-op implementation of the global event bus. All `publish()` calls succeed silently. All `subscribe()` calls register but are never invoked by system events.
-
-### `MemoryManagementStub` (replaces `io.mzio:memory-management`)
-
-Delegates directly to the MIT-licensed `MemoryMapStorage` already present in the 3.9.0 codebase.
-
----
+For example, the local `TaskService` is an open controller-access facade. It is not a reconstructed
+`io.mzio` service and does not model user authorization.
 
 ## Branch workflow
 
+```text
+public mzmine 3.9.0 base
+          │
+          └── open-offline-main  (stable integration)
+                    ▲
+                    └── agent/*  (focused PR branches)
+
+master = modern upstream history / minimum CI bridge, not fork feature development
 ```
-upstream mzmine 3.9.0 ──► open-offline-main  (stable)
-                                  ▲
-         agent/open-offline-base ─┤
-         agent/taskcontroller-*  ─┤
-         agent/synthetic-*       ─┘
+
+Rules:
+
+- create focused `agent/<description>` branches from `open-offline-main`;
+- open pull requests against `open-offline-main`;
+- do not merge modern `master` wholesale into the fork;
+- keep commits and PR descriptions explicit about source provenance and validation;
+- prefer a draft PR while scientific or cross-platform gates are still running;
+- do not include unrelated changes in the same PR.
+
+## Required PR description
+
+Every scientific or infrastructure PR should state:
+
+- objective and scope;
+- public source provenance or original fork-local design statement;
+- files/modules affected;
+- scientific behavior affected;
+- parameter or output-model changes;
+- known non-goals;
+- tests added;
+- Linux/Windows result;
+- frozen dataset IDs/hashes when used;
+- comparison baseline and tolerances;
+- failures reproduced before repair, when applicable;
+- remaining uncertainty.
+
+## Standard validation gates
+
+Every PR targeting `open-offline-main` must preserve the relevant subset of:
+
+1. independence and prohibited-dependency audit;
+2. public-data manifest validation and fail-closed policy tests;
+3. Java 20 compilation and tests on Ubuntu and Windows;
+4. no-login headless startup;
+5. deterministic synthetic LC-MS processing;
+6. deterministic XML batch processing;
+7. comparison with untouched mzmine 3.9.0;
+8. governed public-corpus workflow checks;
+9. one-, two-, and N-thread checks for concurrency-sensitive changes;
+10. memory/cleanup/error-path checks for lifecycle changes.
+
+Typical local commands:
+
+```bash
+python scripts/verify_open_offline.py
+python scripts/fetch_public_test_data.py --validate
+python -m unittest discover -s scripts/tests -p "test_*.py" -v
+./gradlew clean test classes --no-daemon
+python scripts/smoke_test_headless.py
+python scripts/test_headless_batch.py
 ```
 
-- **All feature work** happens in `agent/*` branches.
-- **Pull requests** target `open-offline-main`.
-- **`master`** is never used for feature work — it only carries the CI bridge to upstream.
-- Squash commits are preferred to keep `open-offline-main` history readable.
+A clean source build may require network access to resolve third-party dependencies unless the
+required Gradle cache is already present. Runtime scientific processing must not require an account or
+mandatory network access.
 
----
+## Scientific parity requirements
 
-## CI requirements
+A class existing in both codebases is not parity evidence. A workflow ending successfully is not
+sufficient if downstream filtering could hide upstream differences.
 
-Every PR targeting `open-offline-main` must pass:
+For a capability to be marked **Equivalent**, provide where practical:
 
-1. `./gradlew clean build` — zero compilation errors.
-2. `./gradlew test` — all tests green.
-3. `git grep -E "io\.mzio|AuthRequiredEvent|CurrentUserService"` — **must produce no output**.
-4. `./gradlew dependencies | grep -E "io\.mzio"` — **must produce no output**.
+- frozen identical inputs;
+- reviewed parameter mapping;
+- normalized intermediate records;
+- final records;
+- explicit numerical and categorical tolerances;
+- repeated execution;
+- platform/thread coverage;
+- direct comparison with the declared oracle, currently public mzmine v4.0.8.
 
-If a PR introduces any `io.mzio` reference, it will be rejected regardless of functionality.
+Use the states defined in
+[`docs/public_validation/MZMINE_4_PARITY.md`](docs/public_validation/MZMINE_4_PARITY.md):
 
----
+- Equivalent;
+- Adapted;
+- Not implemented;
+- Out of scope.
+
+## Dataset contribution requirements
+
+Do not commit large raw or mzML files unless a small fixture has a clear redistribution basis and the
+repository explicitly approves vendoring it.
+
+Before enabling an external file in a manifest, record:
+
+- immutable record/commit;
+- exact file path and official URL;
+- explicit license/reuse evidence;
+- byte size and SHA-256;
+- instrument and acquisition metadata;
+- expected assertions;
+- attribution text;
+- CI cost and cleanup policy.
+
+Never disable TLS verification, weaken hash checking, or accept a partial download to make a test
+pass.
 
 ## Porting record template
 
-When porting a file from upstream, add an entry to the table in `OPEN_OFFLINE_FORK.md`:
+Include this information in the PR body or a dedicated provenance document:
 
 | Field | Value |
 |---|---|
-| Upstream commit SHA | e.g. `abc1234` |
-| Original path | e.g. `mzmine-community/src/main/java/...` |
-| License header present | Yes / No |
-| Modifications made | Brief description |
-| Tests added | Yes / No — test class name |
-| `io.mzio` references removed | List removed imports |
+| Upstream repository | `mzmine/mzmine` or other public source |
+| Upstream tag/commit SHA | Exact immutable reference |
+| Original path | Full source path |
+| License/header | License and confirmation |
+| Public availability date/state | Evidence that the source was public |
+| Modifications | Java, architecture, interface, and behavior changes |
+| Proprietary integrations removed | Exact imports/services and why |
+| Tests added | Test classes/workflows |
+| Scientific impact | None or explicit description |
+| Parity classification | Equivalent / Adapted / Not implemented / Out of scope |
 
----
+## Original fork-local implementations
 
-## Questions
+Original functionality should have a short design record describing:
 
-Open an issue on this repository. Do not report open-offline-fork issues to the upstream mzmine project — they are separate codebases.
+- problem being solved;
+- API boundary;
+- deterministic semantics;
+- cancellation/error behavior;
+- concurrency model;
+- non-goals;
+- acceptance tests.
+
+The fork-local `GroupedTask` is the reference pattern: its semantics were documented, implemented,
+then validated cross-platform without claiming upstream binary compatibility.
+
+## Reporting issues
+
+Open issues in this repository for fork-specific behavior. Do not report fork regressions as upstream
+mzmine defects unless the same problem has been independently reproduced on an unmodified supported
+upstream release.
