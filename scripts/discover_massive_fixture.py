@@ -10,18 +10,20 @@ calculate SHA-256. Dataset bytes are never added to Git by this script.
 from __future__ import annotations
 
 import argparse
+import ftplib
 import hashlib
 import json
 import os
 import re
 import shutil
+import ssl
 import sys
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 ACCESSION_RE = re.compile(r"^MSV\d{9}$")
 TASK_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -30,6 +32,9 @@ ALLOWED_SCHEMES = {"ftp", "https"}
 
 class DiscoveryError(RuntimeError):
   """Raised when public fixture discovery cannot be safely completed."""
+
+
+HANDLED_ERRORS = (DiscoveryError, OSError, urllib.error.URLError) + ftplib.all_errors
 
 
 def fetch_json(url: str, timeout: int) -> dict[str, Any]:
@@ -95,19 +100,65 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
   path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def download_and_hash(url: str, expected_size: int, destination: Path, timeout: int) -> str:
+def copy_https(url: str, output: BinaryIO, timeout: int) -> None:
+  request = urllib.request.Request(
+      url, headers={"User-Agent": "mzmine-open-offline-fixture-discovery/1"}
+  )
+  with urllib.request.urlopen(request, timeout=timeout) as response:
+    shutil.copyfileobj(response, output, length=1024 * 1024)
+
+
+def copy_explicit_ftps(url: str, output: BinaryIO, timeout: int) -> None:
+  """Download an ftp:// URL through explicit TLS because MassIVE rejects clear FTP."""
+  parsed = urllib.parse.urlparse(url)
+  if parsed.scheme.lower() != "ftp" or not parsed.hostname:
+    raise DiscoveryError(f"Not a valid public FTP URL: {url}")
+  if parsed.username or parsed.password:
+    raise DiscoveryError("Credential-bearing FTP URLs are forbidden")
+
+  remote_path = urllib.parse.unquote(parsed.path)
+  if not remote_path.startswith("/") or ".." in Path(remote_path).parts:
+    raise DiscoveryError(f"Unsafe FTP path: {remote_path!r}")
+
+  context = ssl.create_default_context()
+  ftp = ftplib.FTP_TLS(context=context, timeout=timeout)
+  try:
+    ftp.connect(parsed.hostname, parsed.port or 21, timeout=timeout)
+    ftp.login(user="anonymous", passwd="mzmine-open-offline@example.invalid")
+    ftp.prot_p()
+    ftp.set_pasv(True)
+    ftp.retrbinary(f"RETR {remote_path}", output.write, blocksize=1024 * 1024)
+  finally:
+    try:
+      ftp.quit()
+    except ftplib.all_errors:
+      ftp.close()
+
+
+def copy_public_url(url: str, output: BinaryIO, timeout: int) -> str:
+  parsed = urllib.parse.urlparse(url)
+  scheme = parsed.scheme.lower()
+  if scheme == "https":
+    copy_https(url, output, timeout)
+    return "https"
+  if scheme == "ftp":
+    copy_explicit_ftps(url, output, timeout)
+    return "explicit-ftps"
+  raise DiscoveryError(f"Unsupported transfer scheme: {scheme!r}")
+
+
+def download_and_hash(
+    url: str, expected_size: int, destination: Path, timeout: int
+) -> tuple[str, str]:
   destination.parent.mkdir(parents=True, exist_ok=True)
   temp_path: Path | None = None
+  transport = "unknown"
   try:
     with tempfile.NamedTemporaryFile(
         prefix=destination.name + ".", suffix=".part", dir=destination.parent, delete=False
     ) as temp_handle:
       temp_path = Path(temp_handle.name)
-      request = urllib.request.Request(
-          url, headers={"User-Agent": "mzmine-open-offline-fixture-discovery/1"}
-      )
-      with urllib.request.urlopen(request, timeout=timeout) as response:
-        shutil.copyfileobj(response, temp_handle, length=1024 * 1024)
+      transport = copy_public_url(url, temp_handle, timeout)
 
     actual_size = temp_path.stat().st_size
     if actual_size != expected_size:
@@ -117,7 +168,7 @@ def download_and_hash(url: str, expected_size: int, destination: Path, timeout: 
     digest = sha256_file(temp_path)
     os.replace(temp_path, destination)
     temp_path = None
-    return digest
+    return digest, transport
   finally:
     if temp_path is not None:
       temp_path.unlink(missing_ok=True)
@@ -181,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
         "ftp_root": ftp_root,
         "resolved_file_url": file_url,
         "expected_size_bytes": args.expected_size,
+        "required_transport": "explicit FTPS for ftp:// MassIVE URLs",
     }
     write_json(output_directory / "fixture_resolution.json", resolution)
     print(json.dumps(resolution, indent=2, sort_keys=True), flush=True)
@@ -189,17 +241,18 @@ def main(argv: list[str] | None = None) -> int:
       return 0
 
     downloaded_path = output_directory / "download" / Path(args.listed_path).name
-    digest = download_and_hash(file_url, args.expected_size, downloaded_path, args.timeout)
+    digest, transport = download_and_hash(file_url, args.expected_size, downloaded_path, args.timeout)
     report = {
         **resolution,
         "size_bytes": args.expected_size,
         "sha256": digest,
+        "transfer_transport": transport,
         "local_file": str(downloaded_path),
     }
     write_json(output_directory / "fixture_report.json", report)
     print(json.dumps(report, indent=2, sort_keys=True), flush=True)
     return 0
-  except (DiscoveryError, OSError, urllib.error.URLError) as exc:
+  except HANDLED_ERRORS as exc:
     print(f"ERROR: {exc}", file=sys.stderr, flush=True)
     return 2
 
