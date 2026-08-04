@@ -41,7 +41,9 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -64,9 +66,11 @@ import org.xml.sax.SAXException;
  * Verifies canonical parameter values and serializer idempotence for the frozen public workflow.
  *
  * <p>The comparison ignores indentation, line endings, Boolean case and numerically equivalent
- * decimal formatting. Element paths, non-discriminator attributes and direct text values remain
- * significant. The published parameter is loaded and saved once, then loaded into a fresh clone and
- * saved again. This distinguishes a source migration from an unstable serializer.</p>
+ * decimal formatting. Repeated entries are deduplicated only for an XML parameter explicitly named
+ * {@code Chemical elements}, because that parameter represents a set and the published XML contains
+ * the same element sequence repeatedly. Every other text value remains literal and order-sensitive.
+ * The published value is saved once, loaded into a fresh clone and saved again so source migration
+ * remains distinct from serializer instability.</p>
  */
 class PublicWorkflowParameterValueAuditTest {
 
@@ -76,8 +80,11 @@ class PublicWorkflowParameterValueAuditTest {
   private static final Path OUTPUT = Path.of("build", "public_workflow_validation",
       "mzmine_settings_value_audit.json");
   private static final String PARAMETER_TAG = "parameter";
+  private static final String CHEMICAL_ELEMENTS_PATH_SUFFIX =
+      "/parameter[@name='Chemical elements']";
   private static final Pattern DECIMAL = Pattern.compile(
       "[+-]?(?:(?:\\d+(?:\\.\\d*)?)|(?:\\.\\d+))(?:[eE][+-]?\\d+)?");
+  private static final Pattern ELEMENT_SYMBOL = Pattern.compile("[A-Z][a-z]?");
 
   private static final ObjectMapper MAPPER = new ObjectMapper()
       .enable(SerializationFeature.INDENT_OUTPUT)
@@ -158,7 +165,8 @@ class PublicWorkflowParameterValueAuditTest {
           final Map<String, List<String>> sourceValues = semanticValues(publishedParameter);
           final Map<String, List<String>> firstValues = semanticValues(firstRoundTrip);
           final Map<String, List<String>> secondValues = semanticValues(secondRoundTrip);
-          auditedSemanticNodeCount += sourceValues.values().stream().mapToInt(List::size).sum();
+          final int semanticNodeCount = sourceValues.values().stream().mapToInt(List::size).sum();
+          auditedSemanticNodeCount += semanticNodeCount;
 
           final List<Map<String, Object>> sourceDifferences = compareValues(sourceValues, firstValues);
           final List<Map<String, Object>> idempotenceDifferences = compareValues(firstValues,
@@ -167,8 +175,7 @@ class PublicWorkflowParameterValueAuditTest {
           final boolean serializerIdempotent = idempotenceDifferences.isEmpty();
 
           parameterReport.put("status", "loaded");
-          parameterReport.put("semantic_node_count",
-              sourceValues.values().stream().mapToInt(List::size).sum());
+          parameterReport.put("semantic_node_count", semanticNodeCount);
           parameterReport.put("source_semantic_sha256", semanticSha256(sourceValues));
           parameterReport.put("roundtrip_1_semantic_sha256", semanticSha256(firstValues));
           parameterReport.put("roundtrip_2_semantic_sha256", semanticSha256(secondValues));
@@ -206,9 +213,11 @@ class PublicWorkflowParameterValueAuditTest {
     }
 
     final Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 1);
+    report.put("schema_version", 2);
     report.put("comparison_policy",
-        "Element paths, attributes and direct values; numeric formatting and Boolean case normalized");
+        "Element paths, attributes and direct values; numeric formatting, Boolean case and repeated Chemical elements set entries normalized");
+    report.put("chemical_element_normalization_scope",
+        "Only parameter elements explicitly named Chemical elements; first-seen order preserved");
     report.put("source_file", settingsPath.toString());
     report.put("source_sha256", expected.sourceSha256());
     report.put("published_mzmine_version", root.getAttribute("mzmine_version"));
@@ -240,6 +249,18 @@ class PublicWorkflowParameterValueAuditTest {
         () -> "Parameter serializers are not idempotent: " + nonIdempotentParameters);
   }
 
+  @Test
+  void canonicalizesOnlyExplicitChemicalElementSets() {
+    final String path = "/parameter[@name='Mass detector']/module[@name='Centroid']"
+        + CHEMICAL_ELEMENTS_PATH_SUFFIX;
+    assertEquals("H,C,N,O,S",
+        canonicalScalar("H,C,N,O,S,H,C,N,O,S", path));
+    assertEquals("H,C,N,O,S",
+        canonicalScalar("H,C,N,O,S", path));
+    assertEquals("H,C,N,O,S,H,C,N,O,S",
+        canonicalScalar("H,C,N,O,S,H,C,N,O,S", "/parameter[@name='Free text']"));
+  }
+
   private static Element saveParameter(final Parameter<?> parameter, final String canonicalName)
       throws Exception {
     final Document document = secureFactory().newDocumentBuilder().newDocument();
@@ -265,7 +286,8 @@ class PublicWorkflowParameterValueAuditTest {
     for (int index = 0; index < rawAttributes.getLength(); index++) {
       final Node attribute = rawAttributes.item(index);
       if (!"name".equals(attribute.getNodeName()) && !"method".equals(attribute.getNodeName())) {
-        attributes.put(attribute.getNodeName(), canonicalScalar(attribute.getNodeValue()));
+        attributes.put(attribute.getNodeName(),
+            canonicalScalar(attribute.getNodeValue(), currentPath + "/@" + attribute.getNodeName()));
       }
     }
 
@@ -279,7 +301,7 @@ class PublicWorkflowParameterValueAuditTest {
     }
 
     final String token = "attributes=" + attributes + ";text="
-        + canonicalScalar(directText.toString());
+        + canonicalScalar(directText.toString(), currentPath);
     values.computeIfAbsent(currentPath, ignored -> new ArrayList<>()).add(token);
 
     for (int index = 0; index < children.getLength(); index++) {
@@ -300,11 +322,17 @@ class PublicWorkflowParameterValueAuditTest {
     return "";
   }
 
-  private static String canonicalScalar(final String rawValue) {
+  private static String canonicalScalar(final String rawValue, final String path) {
     final String value = rawValue == null ? ""
         : rawValue.replace("\r\n", "\n").replace('\r', '\n').trim();
     if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false")) {
-      return value.toLowerCase(java.util.Locale.ROOT);
+      return value.toLowerCase(Locale.ROOT);
+    }
+    if (path.endsWith(CHEMICAL_ELEMENTS_PATH_SUFFIX)) {
+      final String canonicalElements = canonicalChemicalElements(value);
+      if (canonicalElements != null) {
+        return canonicalElements;
+      }
     }
     if (DECIMAL.matcher(value).matches()) {
       try {
@@ -315,6 +343,21 @@ class PublicWorkflowParameterValueAuditTest {
       }
     }
     return value;
+  }
+
+  private static String canonicalChemicalElements(final String value) {
+    if (!value.contains(",")) {
+      return null;
+    }
+    final Set<String> unique = new LinkedHashSet<>();
+    for (final String rawToken : value.split(",", -1)) {
+      final String token = rawToken.trim();
+      if (token.isEmpty() || !ELEMENT_SYMBOL.matcher(token).matches()) {
+        return null;
+      }
+      unique.add(token);
+    }
+    return String.join(",", unique);
   }
 
   private static List<Map<String, Object>> compareValues(
