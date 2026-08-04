@@ -29,6 +29,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -39,6 +40,7 @@ import org.jetbrains.annotations.Nullable;
 public final class RoiMcrTask extends AbstractTask {
 
   private static final Logger logger = Logger.getLogger(RoiMcrTask.class.getName());
+  private static final long RANDOM_SEED = 20260804L;
 
   private final MZmineProject project;
   private final RawDataFile rawFile;
@@ -73,71 +75,23 @@ public final class RoiMcrTask extends AbstractTask {
       validateScans(scans);
 
       final MZTolerance tolerance = parameters.getValue(RoiMcrParameters.mzTolerance);
-      final RoiMcrCore.RoiOptions roiOptions = new RoiMcrCore.RoiOptions(
-          tolerance.getMzTolerance(), tolerance.getPpmTolerance(),
-          parameters.getValue(RoiMcrParameters.noiseLevel),
-          parameters.getValue(RoiMcrParameters.seedIntensity),
-          parameters.getValue(RoiMcrParameters.maximumMissingScans),
-          parameters.getValue(RoiMcrParameters.minimumDataPoints),
-          parameters.getValue(RoiMcrParameters.minimumConsecutiveScans),
-          parameters.getValue(RoiMcrParameters.minimumFeatureHeight));
-      final RoiMcrCore.RoiBuilder builder = new RoiMcrCore.RoiBuilder(roiOptions);
+      final RoiMcrCore.RoiOptions roiOptions = roiOptions(tolerance);
+      final RoiMcrCore.McrOptions mcrOptions = mcrOptions();
+      final List<RoiMcrCore.RoiTrace> rois = buildRois(scans, roiOptions, 0, 0.20);
+      validateRoiCount(rois);
 
-      for (int scanIndex = 0; scanIndex < scans.length; scanIndex++) {
-        checkCancelled();
-        final MassSpectrum massList = scans[scanIndex].getMassList();
-        final int size = massList.getNumberOfDataPoints();
-        builder.acceptScan(scanIndex, massList.getMzValues(new double[size]),
-            massList.getIntensityValues(new double[size]));
-        progress = 0.25 * (scanIndex + 1d) / scans.length;
-      }
-
-      final List<RoiMcrCore.RoiTrace> rois = builder.finish();
-      if (rois.size() < parameters.getValue(RoiMcrParameters.minimumComponentIons)) {
-        throw new IllegalArgumentException("Only " + rois.size()
-            + " valid m/z ROIs remained; at least "
-            + parameters.getValue(RoiMcrParameters.minimumComponentIons) + " are required.");
-      }
-
-      final double[][] original = buildMatrix(scans.length, rois);
-      final double[] scales = RoiMcrCore.columnMaxima(original);
       final double weightingExponent = parameters.getValue(RoiMcrParameters.weightingExponent);
-      final double[][] modelMatrix = RoiMcrCore.weightedCopy(original, weightingExponent, scales);
-      final RoiMcrCore.McrOptions mcrOptions = new RoiMcrCore.McrOptions(
-          parameters.getValue(RoiMcrParameters.maximumComponents),
-          parameters.getValue(RoiMcrParameters.restarts),
-          parameters.getValue(RoiMcrParameters.maximumIterations),
-          parameters.getValue(RoiMcrParameters.nnlsIterations),
-          parameters.getValue(RoiMcrParameters.convergenceTolerance),
-          parameters.getValue(RoiMcrParameters.minimumRankImprovement),
-          parameters.getValue(RoiMcrParameters.minimumRestartStability),
-          parameters.getValue(RoiMcrParameters.smoothingRadius),
-          parameters.getValue(RoiMcrParameters.unimodalityFlexibility),
-          parameters.getValue(RoiMcrParameters.spectralSparsity),
-          parameters.getValue(RoiMcrParameters.minimumComponentIons),
-          parameters.getValue(RoiMcrParameters.minimumComponentEnergy),
-          parameters.getValue(RoiMcrParameters.maximumTemporalCosine), 20260804L);
-
-      final RoiMcrCore.McrResult weightedResult = RoiMcrCore.selectRank(modelMatrix, mcrOptions,
-          this::isCanceled);
-      if (weightedResult == null || weightedResult.rank() < 1) {
-        throw new IllegalStateException("MCR-ALS did not produce an accepted component model.");
-      }
-      progress = 0.65;
-      final double[][] restoredSpectra = RoiMcrCore.restoreSpectralScale(
-          weightedResult.spectra(), scales);
-      final double originalEnergy = squaredNorm(original);
-      final double originalRss = RoiMcrCore.rss(original, weightedResult.concentrations(),
-          restoredSpectra);
-      final double originalExplained = Math.max(0, Math.min(1,
-          1 - originalRss / Math.max(originalEnergy, RoiMcrCore.EPS)));
+      final Analysis reference = fitAnalysis(scans.length, rois, mcrOptions, weightingExponent);
+      progress = 0.48;
+      final RoiMcrRobustness.Assessment robustness = assessPerturbations(scans, tolerance,
+          roiOptions, mcrOptions, weightingExponent, reference);
+      progress = 0.75;
 
       final ModularFeatureList output = new ModularFeatureList(
           rawFile.getName() + " " + parameters.getValue(RoiMcrParameters.suffix),
           getMemoryMapStorage(), rawFile);
       DataTypeUtils.addDefaultChromatographicTypeColumns(output);
-      final int created = createFeatures(output, scans, rois, weightedResult, restoredSpectra,
-          originalExplained);
+      final int created = createFeatures(output, scans, reference, robustness);
       if (created == 0) {
         throw new IllegalStateException("The MCR model was fitted, but no reconstructed ion feature "
             + "passed the feature-creation thresholds.");
@@ -161,18 +115,109 @@ public final class RoiMcrTask extends AbstractTask {
     }
   }
 
-  private int createFeatures(ModularFeatureList output, Scan[] scans,
-      List<RoiMcrCore.RoiTrace> rois, RoiMcrCore.McrResult result, double[][] spectra,
-      double originalExplained) {
+  private RoiMcrRobustness.Assessment assessPerturbations(Scan[] scans, MZTolerance tolerance,
+      RoiMcrCore.RoiOptions referenceRoiOptions, RoiMcrCore.McrOptions mcrOptions,
+      double weightingExponent, Analysis reference) {
+    final List<RoiMcrRobustness.Variant> variants = new ArrayList<>();
+    final double noiseFactor = parameters.getValue(RoiMcrParameters.robustnessNoiseFactor);
+    variants.add(fitNoiseVariant("noise-low", scans, scale(referenceRoiOptions, 1 / noiseFactor),
+        mcrOptions, weightingExponent));
+    progress = 0.54;
+    variants.add(fitNoiseVariant("noise-high", scans, scale(referenceRoiOptions, noiseFactor),
+        mcrOptions, weightingExponent));
+    progress = 0.60;
+
+    final double weightingStep = parameters.getValue(RoiMcrParameters.robustnessWeightingStep);
+    final double lowerWeight = Math.max(0, weightingExponent - weightingStep);
+    final double upperWeight = Math.min(1, weightingExponent + weightingStep);
+    if (Math.abs(lowerWeight - weightingExponent) > RoiMcrCore.EPS) {
+      variants.add(fitWeightVariant("weight-low", scans.length, reference.rois(), mcrOptions,
+          lowerWeight));
+    }
+    progress = 0.66;
+    if (Math.abs(upperWeight - weightingExponent) > RoiMcrCore.EPS) {
+      variants.add(fitWeightVariant("weight-high", scans.length, reference.rois(), mcrOptions,
+          upperWeight));
+    }
+    progress = 0.72;
+
+    final List<RoiMcrRobustness.Signature> signatures = RoiMcrRobustness.signatures(
+        reference.result(), reference.restoredSpectra(), reference.rois());
+    return RoiMcrRobustness.assess(signatures, reference.result().rank(), variants,
+        tolerance.getMzTolerance(), tolerance.getPpmTolerance(),
+        parameters.getValue(RoiMcrParameters.minimumPerturbationSimilarity),
+        parameters.getValue(RoiMcrParameters.minimumPerturbationSupport));
+  }
+
+  private RoiMcrRobustness.Variant fitNoiseVariant(String label, Scan[] scans,
+      RoiMcrCore.RoiOptions roiOptions, RoiMcrCore.McrOptions mcrOptions,
+      double weightingExponent) {
+    try {
+      final List<RoiMcrCore.RoiTrace> rois = buildRois(scans, roiOptions, progress, progress);
+      validateRoiCount(rois);
+      final Analysis analysis = fitAnalysis(scans.length, rois, mcrOptions, weightingExponent);
+      return new RoiMcrRobustness.Variant(label, analysis.result().rank(),
+          RoiMcrRobustness.signatures(analysis.result(), analysis.restoredSpectra(), rois));
+    } catch (CancellationException cancelled) {
+      throw cancelled;
+    } catch (RuntimeException failedVariant) {
+      logger.log(Level.FINE, "ROI-MCR robustness variant failed: " + label, failedVariant);
+      return RoiMcrRobustness.Variant.failed(label);
+    }
+  }
+
+  private RoiMcrRobustness.Variant fitWeightVariant(String label, int numberOfScans,
+      List<RoiMcrCore.RoiTrace> rois, RoiMcrCore.McrOptions mcrOptions,
+      double weightingExponent) {
+    try {
+      final Analysis analysis = fitAnalysis(numberOfScans, rois, mcrOptions, weightingExponent);
+      return new RoiMcrRobustness.Variant(label, analysis.result().rank(),
+          RoiMcrRobustness.signatures(analysis.result(), analysis.restoredSpectra(), rois));
+    } catch (CancellationException cancelled) {
+      throw cancelled;
+    } catch (RuntimeException failedVariant) {
+      logger.log(Level.FINE, "ROI-MCR robustness variant failed: " + label, failedVariant);
+      return RoiMcrRobustness.Variant.failed(label);
+    }
+  }
+
+  private Analysis fitAnalysis(int numberOfScans, List<RoiMcrCore.RoiTrace> rois,
+      RoiMcrCore.McrOptions mcrOptions, double weightingExponent) {
+    checkCancelled();
+    final double[][] original = buildMatrix(numberOfScans, rois);
+    final double[] scales = RoiMcrCore.columnMaxima(original);
+    final double[][] modelMatrix = RoiMcrCore.weightedCopy(original, weightingExponent, scales);
+    final RoiMcrCore.McrResult weightedResult = RoiMcrCore.selectRank(modelMatrix, mcrOptions,
+        this::isCanceled);
+    if (weightedResult == null || weightedResult.rank() < 1) {
+      throw new IllegalStateException("MCR-ALS did not produce an accepted component model.");
+    }
+    final double[][] restoredSpectra = RoiMcrCore.restoreSpectralScale(
+        weightedResult.spectra(), scales);
+    final double originalEnergy = squaredNorm(original);
+    final double originalRss = RoiMcrCore.rss(original, weightedResult.concentrations(),
+        restoredSpectra);
+    final double originalExplained = Math.max(0, Math.min(1,
+        1 - originalRss / Math.max(originalEnergy, RoiMcrCore.EPS)));
+    return new Analysis(rois, weightedResult, restoredSpectra, originalExplained);
+  }
+
+  private int createFeatures(ModularFeatureList output, Scan[] scans, Analysis analysis,
+      RoiMcrRobustness.Assessment robustness) {
     final double minimumContribution = parameters.getValue(
         RoiMcrParameters.minimumSpectralContribution);
     final double minimumAssignment = parameters.getValue(
         RoiMcrParameters.minimumAssignmentFraction);
     final double edgeFraction = parameters.getValue(RoiMcrParameters.componentEdgeFraction);
     final double minimumHeight = parameters.getValue(RoiMcrParameters.minimumFeatureHeight);
+    final RoiMcrCore.McrResult result = analysis.result();
+    final double[][] spectra = analysis.restoredSpectra();
+    final List<RoiMcrCore.RoiTrace> rois = analysis.rois();
     int rowId = 1;
 
     for (int component = 0; component < result.rank(); component++) {
+      final RoiMcrRobustness.ComponentStability componentStability = robustness.component(
+          component);
       final double spectrumMaximum = Arrays.stream(spectra[component]).max().orElse(0);
       final double[] profile = componentProfile(result.concentrations(), component);
       final int apex = argmax(profile);
@@ -222,15 +267,77 @@ public final class RoiMcrTask extends AbstractTask {
         final ModularFeatureListRow row = new ModularFeatureListRow(output, rowId++, feature);
         row.set(FeatureShapeType.class, true);
         row.set(CommentType.class,
-            "ROI-MCR component=%d; rank=%d; ROI=%d; assignment=%.4f; stability=%.4f; "
-                .formatted(component + 1, result.rank(), rois.get(roiIndex).id(), assignment,
-                    result.restartStability())
-                + "original_explained=" + String.format("%.6f", originalExplained));
+            "ROI-MCR component=%d; rank=%d; ROI=%d; assignment=%.4f; "
+                .formatted(component + 1, result.rank(), rois.get(roiIndex).id(), assignment)
+                + "restart_stability=" + format(result.restartStability())
+                + "; perturbation_stability=" + format(componentStability.meanSimilarity())
+                + "; perturbation_support=" + format(componentStability.supportFraction())
+                + "; perturbation_variants=" + robustness.variantCount()
+                + "; rank_agreement=" + format(robustness.rankAgreement())
+                + "; confidence=" + confidenceLabel(componentStability.confidence())
+                + "; original_explained=" + format(analysis.originalExplained()));
         output.addRow(row);
       }
-      progress = 0.65 + 0.3 * (component + 1d) / result.rank();
+      progress = 0.75 + 0.20 * (component + 1d) / result.rank();
     }
     return rowId - 1;
+  }
+
+  private List<RoiMcrCore.RoiTrace> buildRois(Scan[] scans, RoiMcrCore.RoiOptions options,
+      double progressStart, double progressEnd) {
+    final RoiMcrCore.RoiBuilder builder = new RoiMcrCore.RoiBuilder(options);
+    for (int scanIndex = 0; scanIndex < scans.length; scanIndex++) {
+      checkCancelled();
+      final MassSpectrum massList = scans[scanIndex].getMassList();
+      final int size = massList.getNumberOfDataPoints();
+      builder.acceptScan(scanIndex, massList.getMzValues(new double[size]),
+          massList.getIntensityValues(new double[size]));
+      if (progressEnd > progressStart) {
+        progress = progressStart + (progressEnd - progressStart) * (scanIndex + 1d) / scans.length;
+      }
+    }
+    return builder.finish();
+  }
+
+  private RoiMcrCore.RoiOptions roiOptions(MZTolerance tolerance) {
+    return new RoiMcrCore.RoiOptions(tolerance.getMzTolerance(), tolerance.getPpmTolerance(),
+        parameters.getValue(RoiMcrParameters.noiseLevel),
+        parameters.getValue(RoiMcrParameters.seedIntensity),
+        parameters.getValue(RoiMcrParameters.maximumMissingScans),
+        parameters.getValue(RoiMcrParameters.minimumDataPoints),
+        parameters.getValue(RoiMcrParameters.minimumConsecutiveScans),
+        parameters.getValue(RoiMcrParameters.minimumFeatureHeight));
+  }
+
+  private RoiMcrCore.McrOptions mcrOptions() {
+    return new RoiMcrCore.McrOptions(parameters.getValue(RoiMcrParameters.maximumComponents),
+        parameters.getValue(RoiMcrParameters.restarts),
+        parameters.getValue(RoiMcrParameters.maximumIterations),
+        parameters.getValue(RoiMcrParameters.nnlsIterations),
+        parameters.getValue(RoiMcrParameters.convergenceTolerance),
+        parameters.getValue(RoiMcrParameters.minimumRankImprovement),
+        parameters.getValue(RoiMcrParameters.minimumRestartStability),
+        parameters.getValue(RoiMcrParameters.smoothingRadius),
+        parameters.getValue(RoiMcrParameters.unimodalityFlexibility),
+        parameters.getValue(RoiMcrParameters.spectralSparsity),
+        parameters.getValue(RoiMcrParameters.minimumComponentIons),
+        parameters.getValue(RoiMcrParameters.minimumComponentEnergy),
+        parameters.getValue(RoiMcrParameters.maximumTemporalCosine), RANDOM_SEED);
+  }
+
+  private static RoiMcrCore.RoiOptions scale(RoiMcrCore.RoiOptions options, double factor) {
+    return new RoiMcrCore.RoiOptions(options.absoluteMzTolerance(), options.ppmTolerance(),
+        options.noiseLevel() * factor, options.seedIntensity() * factor,
+        options.maximumMissingScans(), options.minimumDataPoints(),
+        options.minimumConsecutiveScans(), options.minimumHeight() * factor);
+  }
+
+  private void validateRoiCount(List<RoiMcrCore.RoiTrace> rois) {
+    final int minimum = parameters.getValue(RoiMcrParameters.minimumComponentIons);
+    if (rois.size() < minimum) {
+      throw new IllegalArgumentException("Only " + rois.size()
+          + " valid m/z ROIs remained; at least " + minimum + " are required.");
+    }
   }
 
   private static double[][] buildMatrix(int numberOfScans, List<RoiMcrCore.RoiTrace> rois) {
@@ -292,6 +399,14 @@ public final class RoiMcrTask extends AbstractTask {
     return best;
   }
 
+  private static String format(double value) {
+    return String.format(Locale.ROOT, "%.6f", value);
+  }
+
+  private static String confidenceLabel(RoiMcrRobustness.Confidence confidence) {
+    return confidence.name().toLowerCase(Locale.ROOT).replace('_', '-');
+  }
+
   private static double squaredNorm(double[][] matrix) {
     double sum = 0;
     for (double[] row : matrix) {
@@ -300,5 +415,13 @@ public final class RoiMcrTask extends AbstractTask {
       }
     }
     return sum;
+  }
+
+  private record Analysis(List<RoiMcrCore.RoiTrace> rois, RoiMcrCore.McrResult result,
+                          double[][] restoredSpectra, double originalExplained) {
+
+    Analysis {
+      rois = List.copyOf(rois);
+    }
   }
 }
