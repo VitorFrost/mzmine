@@ -27,6 +27,7 @@ package io.github.mzmine.taskcontrol.impl;
 
 import io.github.mzmine.taskcontrol.Task;
 import io.github.mzmine.taskcontrol.TaskPriority;
+import io.github.mzmine.taskcontrol.TaskStatus;
 import javafx.beans.property.Property;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -113,5 +114,9 @@ public class WrappedTask {
 
   synchronized void removeTaskReference() {
     task = new FinishedTask(task);
+  }
+
+  synchronized void removeTaskReference(TaskStatus finalStatus, String finalErrorMessage) {
+    task = new FinishedTask(task, finalStatus, finalErrorMessage);
   }
 }
