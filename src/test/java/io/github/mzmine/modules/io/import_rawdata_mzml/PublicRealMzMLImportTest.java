@@ -21,12 +21,14 @@
  */
 package io.github.mzmine.modules.io.import_rawdata_mzml;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.common.collect.Range;
 import io.github.mzmine.datamodel.MZmineProject;
+import io.github.mzmine.datamodel.MassSpectrumType;
 import io.github.mzmine.datamodel.PolarityType;
 import io.github.mzmine.datamodel.RawDataFile;
 import io.github.mzmine.datamodel.Scan;
@@ -50,7 +52,18 @@ class PublicRealMzMLImportTest {
 
   private static final String FIXTURE_PROPERTY = "openOffline.publicMzML";
   private static final String FIXTURE_ENVIRONMENT = "OPEN_OFFLINE_PUBLIC_MZML";
+
   private static final long EXPECTED_SIZE = 87_090_777L;
+  private static final int EXPECTED_SCANS = 5_221;
+  private static final int EXPECTED_MS1_SCANS = 4_081;
+  private static final int EXPECTED_MS2_SCANS = 1_140;
+  private static final long EXPECTED_TOTAL_DATA_POINTS = 6_477_349L;
+  private static final int EXPECTED_MAX_DATA_POINTS = 3_030;
+  private static final double EXPECTED_MIN_MZ = 50.00162125;
+  private static final double EXPECTED_MAX_MZ = 749.99395752;
+  private static final float EXPECTED_MIN_RT = 0.77684957f;
+  private static final float EXPECTED_MAX_RT = 27.61178589f;
+  private static final double NUMERIC_TOLERANCE = 0.00001;
 
   @Test
   void importsAndCharacterizesFrozenPublicMzML() throws Exception {
@@ -87,13 +100,20 @@ class PublicRealMzMLImportTest {
       final List<PolarityType> polarity = raw.getDataPolarity();
       final long totalDataPoints = raw.stream().mapToLong(Scan::getNumberOfDataPoints).sum();
 
-      assertTrue(scanCount > 100, "Real LC-MS file should contain more than 100 scans");
-      assertTrue(msLevels.length >= 1, "At least one MS level is required");
-      assertTrue(rtRange.upperEndpoint() > rtRange.lowerEndpoint(), "RT range must be positive");
-      assertTrue(mzRange.upperEndpoint() > mzRange.lowerEndpoint(), "m/z range must be positive");
-      assertFalse(polarity.isEmpty(), "At least one polarity must be reported");
-      assertTrue(totalDataPoints > scanCount, "Spectra must contain data points");
-      assertTrue(raw.getMaxRawDataPoints() > 0, "At least one scan must contain raw data points");
+      assertEquals(EXPECTED_SCANS, scanCount);
+      assertArrayEquals(new int[]{1, 2}, msLevels);
+      assertEquals(EXPECTED_MS1_SCANS, raw.getNumOfScans(1));
+      assertEquals(EXPECTED_MS2_SCANS, raw.getNumOfScans(2));
+      assertEquals(EXPECTED_MIN_RT, rtRange.lowerEndpoint(), NUMERIC_TOLERANCE);
+      assertEquals(EXPECTED_MAX_RT, rtRange.upperEndpoint(), NUMERIC_TOLERANCE);
+      assertEquals(EXPECTED_MIN_MZ, mzRange.lowerEndpoint(), NUMERIC_TOLERANCE);
+      assertEquals(EXPECTED_MAX_MZ, mzRange.upperEndpoint(), NUMERIC_TOLERANCE);
+      assertEquals(List.of(PolarityType.NEGATIVE), polarity);
+      assertEquals(MassSpectrumType.CENTROIDED, raw.getSpectraType());
+      assertEquals(EXPECTED_TOTAL_DATA_POINTS, totalDataPoints);
+      assertEquals(EXPECTED_MAX_DATA_POINTS, raw.getMaxRawDataPoints());
+      assertFalse(raw.isContainsEmptyScans());
+      assertFalse(raw.isContainsZeroIntensity());
 
       final Path output = Path.of("build", "public_validation",
           "zenodo_14001110_Banane_30ngmL_001_import_summary.json");
