@@ -22,10 +22,65 @@ The machine-readable source of truth is
 |---:|---|---|---|
 | 0 | mzML syntax, indexing, arrays, and metadata | HUPO-PSI `tiny.pwiz.1.1.mzML` | License terms pending |
 | 1 | Official behavioral references | Public MZmine workshop, MSe, and GC-TOF integration fixtures | Reference only |
-| 2 | Small real LC-MS performance and determinism | MassIVE `MSV000101091` | Exact file selected; dataset license/hash pending |
-| 3 | Blank and technical-replicate behavior | MassIVE `MSV000089848` | Minimal subset pending |
+| 2 | Small real LC-MS performance and determinism | Zenodo record `14001110` | First fixture frozen and validated |
+| 2 reserve | Additional small real LC-MS | MassIVE `MSV000101091` | Provenance verified; hosted-runner FTPS transport blocked |
+| 3 | Blank and technical-replicate behavior | Zenodo `14001110` blanks/replicates, then MassIVE `MSV000089848` | Minimal subset pending |
 | 4 | Waters compatibility | MassIVE `MSV000091372` | CC0 verified; exact file list/hash pending |
 | 4 reserve | Additional Waters lipidomics | MassIVE `MSV000097125` | Subset pending |
+
+## First frozen real LC-MS fixture
+
+The first approved public real-data file is:
+
+- repository: Zenodo;
+- record: `14001110`;
+- DOI: `10.5281/zenodo.14001110`;
+- creator: Markus Aigensberger, BOKU University;
+- file: `Banane_30ngmL_001.mzML`;
+- license: Creative Commons Attribution 4.0 International;
+- byte size: `87,090,777`;
+- repository MD5: `488ed6c48c0db085de966e96e74902cc`;
+- frozen SHA-256: `2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d`.
+
+Required attribution for reports derived from this fixture:
+
+> Aigensberger, Markus. Raw data and supporting files for “Modular comparison of untargeted
+> metabolomics processing steps”. Zenodo. DOI: 10.5281/zenodo.14001110. CC BY 4.0.
+
+The mzML is downloaded only through the approved manifest. CI verifies the exact size and SHA-256,
+imports it, deletes the bytes, and retains only summary/test reports.
+
+### Frozen import reference
+
+| Property | Expected value |
+|---|---:|
+| Total scans | 5,221 |
+| MS1 scans | 4,081 |
+| MS2 scans | 1,140 |
+| Polarity | Negative |
+| Spectrum representation | Centroided |
+| RT range | 0.77684957–27.61178589 min |
+| m/z range | 50.00162125–749.99395752 |
+| Total data points | 6,477,349 |
+| Maximum points in one scan | 3,030 |
+| Empty scans | None |
+| Zero/negative intensities | None reported by the imported file model |
+
+Import elapsed time is reported but is not a deterministic scientific assertion because it depends
+on runner hardware and cache state.
+
+## MassIVE transport investigation
+
+MassIVE `MSV000101091` remains a useful small-file candidate. Its CC0 record, exact path, official FTP
+root, TLS leaf SAN, AIA issuer, and certificate chain were resolved and verified. However, hosted
+GitHub runners could not establish the passive FTPS data channel. The entry remains disabled rather
+than bypassing certificate checks or silently accepting incomplete downloads.
+
+It may be promoted later through:
+
+- an official HTTPS file route;
+- a self-hosted runner with permitted FTPS passive ports; or
+- a separately mirrored copy with documented authorization and matching hash.
 
 ## First Waters target
 
@@ -85,7 +140,7 @@ unless explicitly requested.
 
 A candidate may be changed to `download_enabled: true` only after all items below are complete:
 
-- [ ] immutable repository commit or MassIVE accession;
+- [ ] immutable repository commit or data-repository record;
 - [ ] exact relative source path;
 - [ ] public source page;
 - [ ] explicit reuse/license evidence;
@@ -94,5 +149,6 @@ A candidate may be changed to `download_enabled: true` only after all items belo
 - [ ] instrument and acquisition metadata;
 - [ ] local destination path without traversal;
 - [ ] expected scientific assertions;
+- [ ] attribution text where the license requires it;
 - [ ] one manual verification of the downloaded file;
 - [ ] CI cost reviewed before enabling automatic download.
