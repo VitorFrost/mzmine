@@ -1,0 +1,114 @@
+name: Validate Public MZmine Workflow
+
+on:
+  push:
+    branches:
+      - agent/public-workflow-settings
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - scripts/fetch_public_test_data.py
+      - scripts/inspect_mzmine_settings.py
+      - scripts/validate_mzmine_settings_inventory.py
+      - scripts/tests/test_mzmine_settings_inventory.py
+      - .github/workflows/discover_public_workflow.yml
+      - datasets/public_workflow_manifest.json
+      - datasets/expected/zenodo_14000687_mzmine_settings_inventory.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-public-settings:
+    name: Validate published MZmine settings (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate all public manifests and offline policy tests
+        shell: bash
+        run: |
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --validate
+          python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Download and cryptographically verify published settings XML
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_workflow_manifest.json
+          --dataset zenodo-14000687-mzmine-processing-settings
+          --output-dir build/public_validation_data
+          --timeout 120
+          --retries 3
+
+      - name: Verify frozen XML again before inspection
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_workflow_manifest.json
+          --dataset zenodo-14000687-mzmine-processing-settings
+          --output-dir build/public_validation_data
+          --verify-existing
+
+      - name: Inspect XML structure without executing it
+        shell: bash
+        run: >-
+          python scripts/inspect_mzmine_settings.py
+          "build/public_validation_data/zenodo/14000687/MZmine processing settings.xml"
+          --output build/public_workflow_validation/mzmine_settings_inventory.json
+
+      - name: Validate exact structure and public module source availability
+        shell: bash
+        run: >-
+          python scripts/validate_mzmine_settings_inventory.py
+          --inventory build/public_workflow_validation/mzmine_settings_inventory.json
+          --expected datasets/expected/zenodo_14000687_mzmine_settings_inventory.json
+          --repo-root .
+          --output build/public_workflow_validation/mzmine_settings_compatibility.json
+
+      - name: Display validated reports
+        shell: bash
+        run: |
+          cat build/public_workflow_validation/mzmine_settings_inventory.json
+          cat build/public_workflow_validation/mzmine_settings_compatibility.json
+
+      - name: Remove downloaded XML bytes on Linux
+        if: always() && runner.os != 'Windows'
+        run: rm -rf build/public_validation_data
+
+      - name: Remove downloaded XML bytes on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path build/public_validation_data) {
+            Remove-Item -Recurse -Force build/public_validation_data
+          }
+
+      - name: Upload inventory and compatibility reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenodo-14000687-mzmine-settings-${{ matrix.os }}
+          path: |
+            build/public_workflow_validation/mzmine_settings_inventory.json
+            build/public_workflow_validation/mzmine_settings_compatibility.json
+          if-no-files-found: warn
+          retention-days: 14

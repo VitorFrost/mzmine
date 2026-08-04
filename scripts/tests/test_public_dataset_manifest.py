@@ -22,18 +22,38 @@ class PublicDatasetManifestTest(unittest.TestCase):
 
   @classmethod
   def setUpClass(cls) -> None:
-    cls.manifest_path = Path(__file__).resolve().parents[2] / "datasets" / "public_validation_manifest.json"
-    cls.manifest = MODULE.load_manifest(cls.manifest_path)
+    cls.datasets_directory = Path(__file__).resolve().parents[2] / "datasets"
+    cls.manifest_paths = sorted(cls.datasets_directory.glob("public_*_manifest.json"))
+    if not cls.manifest_paths:
+      raise AssertionError("No public dataset manifests were found")
+    cls.manifests = {path.name: MODULE.load_manifest(path) for path in cls.manifest_paths}
+    cls.manifest = cls.manifests["public_validation_manifest.json"]
 
-  def test_repository_manifest_is_valid_and_ids_are_unique(self) -> None:
-    MODULE.validate_manifest(self.manifest)
-    ids = [dataset["id"] for dataset in self.manifest["datasets"]]
+  def test_all_repository_manifests_are_valid_and_ids_are_globally_unique(self) -> None:
+    ids: list[str] = []
+    for manifest in self.manifests.values():
+      MODULE.validate_manifest(manifest)
+      ids.extend(dataset["id"] for dataset in manifest["datasets"])
     self.assertEqual(len(ids), len(set(ids)))
 
   def test_no_candidate_is_downloadable_before_hash_is_frozen(self) -> None:
-    for dataset in self.manifest["datasets"]:
-      if dataset["status"] in {"candidate", "reserve-candidate", "reference-only"}:
-        self.assertFalse(dataset["download_enabled"], dataset["id"])
+    for manifest in self.manifests.values():
+      for dataset in manifest["datasets"]:
+        if dataset["status"] in {
+            "candidate", "reserve-candidate", "reference-only", "transport-blocked-candidate"
+        }:
+          self.assertFalse(dataset["download_enabled"], dataset["id"])
+
+  def test_frozen_enabled_files_have_complete_verification_metadata(self) -> None:
+    for manifest in self.manifests.values():
+      for dataset in manifest["datasets"]:
+        if dataset["download_enabled"]:
+          self.assertEqual("frozen", dataset["status"], dataset["id"])
+          self.assertEqual("verified", dataset["license"]["status"], dataset["id"])
+          self.assertTrue(dataset["files"], dataset["id"])
+          for file_info in dataset["files"]:
+            self.assertGreater(file_info["expected_size_bytes"], 0)
+            self.assertRegex(file_info["sha256"], r"^[0-9a-f]{64}$")
 
   def test_disabled_dataset_refuses_download(self) -> None:
     selected = {self.manifest["datasets"][0]["id"]}
@@ -100,10 +120,11 @@ class PublicDatasetManifestTest(unittest.TestCase):
       MODULE.validate_manifest(invalid)
 
   def test_manifest_round_trip_remains_utf8_json(self) -> None:
-    with tempfile.TemporaryDirectory() as temp_dir:
-      path = Path(temp_dir) / "manifest.json"
-      path.write_text(json.dumps(self.manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-      MODULE.load_manifest(path)
+    for name, manifest in self.manifests.items():
+      with self.subTest(manifest=name), tempfile.TemporaryDirectory() as temp_dir:
+        path = Path(temp_dir) / name
+        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        MODULE.load_manifest(path)
 
 
 if __name__ == "__main__":
