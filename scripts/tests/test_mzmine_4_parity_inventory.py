@@ -46,9 +46,12 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
         "8029f930d28c0447f0acf2bcabef0a79865ad434",
         report["oracle_commit"],
     )
+    self.assertEqual("blocked-by-independence-policy", report["oracle_execution_status"])
     self.assertEqual(12, report["module_count"])
     self.assertEqual(12, report["source_presence_verified_count"])
     self.assertEqual(0, report["direct_differential_complete_count"])
+    self.assertEqual(2, report["dataset_group_count"])
+    self.assertEqual(3, report["tolerance_profile_count"])
 
   def test_equivalent_requires_direct_differential_evidence(self) -> None:
     inventory = copy.deepcopy(self.inventory)
@@ -60,8 +63,26 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
 
   def test_unknown_dataset_is_rejected(self) -> None:
     inventory = copy.deepcopy(self.inventory)
-    inventory["modules"][0]["differential_gate"]["dataset_ids"] = ["missing-dataset"]
+    inventory["dataset_groups"]["single"] = ["missing-dataset"]
     with self.assertRaisesRegex(VALIDATOR.ValidationError, "unknown dataset"):
+      VALIDATOR.validate(inventory, self.manifest)
+
+  def test_unknown_dataset_group_is_rejected(self) -> None:
+    inventory = copy.deepcopy(self.inventory)
+    inventory["modules"][0]["gate"]["dataset_group"] = "missing-group"
+    with self.assertRaisesRegex(VALIDATOR.ValidationError, "unknown dataset group"):
+      VALIDATOR.validate(inventory, self.manifest)
+
+  def test_unknown_finding_code_is_rejected(self) -> None:
+    inventory = copy.deepcopy(self.inventory)
+    inventory["modules"][0]["findings"].append("missing-finding")
+    with self.assertRaisesRegex(VALIDATOR.ValidationError, "unknown finding codes"):
+      VALIDATOR.validate(inventory, self.manifest)
+
+  def test_unknown_tolerance_profile_is_rejected(self) -> None:
+    inventory = copy.deepcopy(self.inventory)
+    inventory["modules"][0]["gate"]["tolerance_profile"] = "missing-profile"
+    with self.assertRaisesRegex(VALIDATOR.ValidationError, "unknown tolerance profile"):
       VALIDATOR.validate(inventory, self.manifest)
 
   def test_oracle_commit_is_fail_closed(self) -> None:
