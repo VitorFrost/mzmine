@@ -150,34 +150,64 @@ Validation fails when:
 
 Decision: component-level reporting is required before local-window integration.
 
-## Gate 6 — automatic local windows
+## Gate 6 — automatic local windows and bounded ROI memory
 
-Status: **implemented as scientific core**, **validated technically in synthetic tests**,
-**public full-range characterization in progress**, **not production-active**.
+Status: **implemented as scientific core**, **validated technically**, **validated on public data**,
+**not production-active**.
 
-Implemented protections:
+The first full-range attempt exposed boxed-list heap exhaustion in the prototype ROI builder. A
+primitive, bounded builder was added and tested for trace equivalence when the retention limit is not
+reached.
 
-- relative ROI activity intervals;
-- bounded scan gaps and window widths;
-- minimum ROI support;
-- broad ROI exclusion from clustering anchors;
-- broad ROI reassignment to overlapping windows;
-- square-root-compressed aggregate apex;
-- bounded fallback when all ROIs are broad;
-- candidate-window deduplication.
+Public full-common-range characterization used:
 
-Public characterization records, separately for sample and blank:
+- negative MS1 scans;
+- ROI m/z tolerance 0.01 Da / 15 ppm;
+- adaptive ROI noise and 3× seed/minimum height;
+- maximum retained ROIs: 8,000;
+- maximum local-window width: 120 scans;
+- minimum window support: 2 ROIs.
 
-- persistent ROI count;
-- local-window count;
-- scan coverage;
-- overlapping scan assignments;
-- minimum/maximum window width;
-- maximum and mean ROI support;
-- every window's scan and retention-time bounds.
+Results:
 
-Decision gate: do not activate local windows if segmentation is excessively fragmented, leaves major
-regions uncovered, produces unbounded matrices, or differs unexpectedly across operating systems.
+| Metric | Sample | Blank |
+|---|---:|---:|
+| Scans | 4,084 | 4,111 |
+| Input centroid points | 6,332,682 | 6,365,258 |
+| Points above ROI noise | 3,523,379 | 3,583,060 |
+| ROIs started | 135,085 | 129,001 |
+| Valid completed ROIs | 6,203 | 4,446 |
+| Retained ROIs | 6,203 | 4,446 |
+| Discarded by 8,000-ROI limit | 0 | 0 |
+| Maximum simultaneously active ROIs | 1,047 | 984 |
+| Maximum points in one ROI | 4,042 | 3,983 |
+| Local windows | 56 | 52 |
+| Covered scans | 3,839 | 3,713 |
+| Coverage | 94.00% | 90.32% |
+| Minimum / maximum window width | 26 / 120 | 27 / 120 |
+| Maximum ROIs in one window | 1,509 | 1,432 |
+| Mean ROIs per window | 642.54 | 664.54 |
+
+Runtime:
+
+| Platform | Sample | Blank |
+|---|---:|---:|
+| Ubuntu | 4.063 s | 3.854 s |
+| Windows | 5.631 s | 5.490 s |
+
+Ubuntu and Windows produced identical scientific JSON after excluding filesystem paths and elapsed
+times.
+
+Decision:
+
+- the primitive builder resolves the observed heap failure;
+- the 8,000-ROI retention boundary did not truncate this public pair;
+- full-range segmentation is bounded and reproducible;
+- local fitting is not yet approved because individual matrices still contain up to 1,509 ROIs and
+  each reference fit currently implies multiple perturbation models.
+
+The next gate must measure local-MCR runtime, memory, rank distribution and reconciliation behavior
+before wiring local windows into `RoiMcrTask`.
 
 ## Gate 7 — cross-window component reconciliation
 
@@ -195,8 +225,8 @@ Representative score:
 + 20% restart stability + 20% original-scale explained signal
 ```
 
-Decision gate: public local-window characterization must pass before fitting and reconciling all
-public windows.
+Decision gate: run public local-window fitting and reconciliation while retaining per-window rank,
+fit, stability, runtime, memory and duplicate-group evidence.
 
 ## Gate 8 — paired component-level blank evidence
 
@@ -217,9 +247,8 @@ reconciliation across local windows is required before paired blank classificati
 
 The module remains absent from the global GUI and batch allowlist. Registration requires:
 
-1. bounded public local-window characterization on Ubuntu and Windows;
-2. public local-window fitting and reconciliation;
-3. paired component-level blank evidence;
-4. acceptable performance and deterministic output;
-5. preserved standard CI and MZmine 3.9.0 baseline comparison;
-6. explicit experimental labeling and documented analytical limitations.
+1. public local-window fitting and reconciliation;
+2. paired component-level blank evidence;
+3. acceptable full-range fitting performance and deterministic output;
+4. preserved standard CI and MZmine 3.9.0 baseline comparison;
+5. explicit experimental labeling and documented analytical limitations.
