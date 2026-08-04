@@ -3,12 +3,19 @@ name: Open Offline CI
 on:
   push:
     branches:
+      - "open-offline-main"
       - "agent/**"
   pull_request:
+    branches:
+      - "open-offline-main"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: open-offline-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   independence-audit:
@@ -23,6 +30,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Record tested source commit
+        shell: bash
+        run: |
+          mkdir -p build/open_offline_ci
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "event=${GITHUB_EVENT_NAME}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "runner_os=${RUNNER_OS}"
+          } > build/open_offline_ci/independence-metadata.txt
+
       - name: Audit source, build files, and JARs
         run: python scripts/verify_open_offline.py
 
@@ -31,6 +50,15 @@ jobs:
 
       - name: Test fail-closed dataset policy
         run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Upload independence metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: independence-metadata-${{ github.run_id }}
+          path: build/open_offline_ci/independence-metadata.txt
+          if-no-files-found: error
+          retention-days: 14
 
   compile-and-test:
     name: Compile and test (${{ matrix.os }})
@@ -68,11 +96,26 @@ jobs:
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Record tested source commit
+        shell: bash
+        run: |
+          mkdir -p build/open_offline_ci
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "event=${GITHUB_EVENT_NAME}"
+            echo "ref=${GITHUB_REF}"
+            echo "sha=$(git rev-parse HEAD)"
+            echo "baseline_sha=$(git -C baseline-mzmine-3.9 rev-parse HEAD)"
+            echo "runner_os=${RUNNER_OS}"
+            echo "java_home=${JAVA_HOME}"
+          } > build/open_offline_ci/compile-metadata.txt
+
       - name: Show tool versions and baseline commit
         shell: bash
         run: |
           java -version
           ./gradlew --version
+          git rev-parse HEAD
           git -C baseline-mzmine-3.9 rev-parse HEAD
 
       - name: Compile and test on Linux
@@ -93,11 +136,20 @@ jobs:
       - name: Compare with untouched MZmine 3.9.0
         run: python scripts/compare_unmodified_39.py baseline-mzmine-3.9
 
+      - name: Upload exact tested commit metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-commit-${{ matrix.os }}-${{ github.run_id }}
+          path: build/open_offline_ci/compile-metadata.txt
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload test reports after failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports-${{ matrix.os }}
+          name: test-reports-${{ matrix.os }}-${{ github.run_id }}
           path: |
             build/reports/tests/
             build/test-results/
