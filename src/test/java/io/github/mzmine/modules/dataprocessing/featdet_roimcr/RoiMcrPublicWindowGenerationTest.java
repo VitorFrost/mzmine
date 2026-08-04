@@ -157,7 +157,7 @@ class RoiMcrPublicWindowGenerationTest {
     for (boolean value : covered) {
       coveredScans += value ? 1 : 0;
     }
-    return new WindowSummary(roiResult.statistics(), windows, coveredScans,
+    return new WindowSummary(roiResult.statistics(), scans.length, windows, coveredScans,
         overlappingAssignments, windows.isEmpty() ? 0 : minimumScans, maximumScans, maximumRois,
         windows.isEmpty() ? 0 : totalRois / windows.size());
   }
@@ -165,6 +165,14 @@ class RoiMcrPublicWindowGenerationTest {
   private static void validate(String label, WindowSummary summary, List<String> errors) {
     if (summary.roiStatistics().retainedRois() < WINDOW_OPTIONS.minimumRois()) {
       errors.add(label + ": too few retained ROIs");
+    }
+    if (summary.roiStatistics().discardedByLimit() > 0
+        || summary.roiStatistics().completedCandidateRois()
+        != summary.roiStatistics().retainedRois()) {
+      errors.add(label + ": ROI retention limit truncated valid candidates: completed="
+          + summary.roiStatistics().completedCandidateRois() + ", retained="
+          + summary.roiStatistics().retainedRois() + ", discarded="
+          + summary.roiStatistics().discardedByLimit());
     }
     if (summary.windows().isEmpty()) {
       errors.add(label + ": no local windows generated");
@@ -290,7 +298,7 @@ class RoiMcrPublicWindowGenerationTest {
     return Math.round((System.nanoTime() - start) / 1_000_000d) / 1_000d;
   }
 
-  private record WindowSummary(RoiMcrMemorySafeBuilder.Statistics roiStatistics,
+  private record WindowSummary(RoiMcrMemorySafeBuilder.Statistics roiStatistics, int scanCount,
                                List<RoiMcrWindows.Window> windows, int coveredScans,
                                int overlappingScanAssignments, int minimumWindowScans,
                                int maximumWindowScans, int maximumWindowRois,
@@ -298,18 +306,19 @@ class RoiMcrPublicWindowGenerationTest {
 
     WindowSummary {
       windows = List.copyOf(windows);
+      if (scanCount < 1 || coveredScans < 0 || coveredScans > scanCount) {
+        throw new IllegalArgumentException("Invalid public ROI-MCR window summary");
+      }
     }
 
     double coverageFraction() {
-      if (windows.isEmpty()) {
-        return 0;
-      }
-      final int lastEnd = windows.stream().mapToInt(RoiMcrWindows.Window::endScan).max().orElse(0);
-      final int inferredScanCount = Math.max(coveredScans, lastEnd + 1);
-      return coveredScans / (double) inferredScanCount;
+      return coveredScans / (double) scanCount;
     }
 
     Map<String, Object> toMap(Scan[] scans) {
+      if (scans.length != scanCount) {
+        throw new IllegalArgumentException("Scan array does not match window summary");
+      }
       final List<Map<String, Object>> windowMaps = new ArrayList<>();
       for (RoiMcrWindows.Window window : windows) {
         windowMaps.add(Map.of("id", window.id(), "start_scan", window.startScan(),
@@ -329,11 +338,11 @@ class RoiMcrPublicWindowGenerationTest {
       statistics.put("maximum_active_rois", roiStatistics.maximumActiveRois());
       statistics.put("maximum_points_in_one_roi", roiStatistics.maximumPointsInOneRoi());
       final Map<String, Object> map = new LinkedHashMap<>();
-      map.put("scan_count", scans.length);
+      map.put("scan_count", scanCount);
       map.put("roi_builder", statistics);
       map.put("window_count", windows.size());
       map.put("covered_scans", coveredScans);
-      map.put("coverage_fraction", coveredScans / (double) scans.length);
+      map.put("coverage_fraction", coverageFraction());
       map.put("overlapping_scan_assignments", overlappingScanAssignments);
       map.put("minimum_window_scans", minimumWindowScans);
       map.put("maximum_window_scans", maximumWindowScans);
