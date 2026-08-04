@@ -92,12 +92,15 @@ jobs:
             --connect-timeout 20 --max-time 60 \
             --output "$TLS_DIR/issuer.download" "$AIA_URL"
 
-          if openssl x509 -in "$TLS_DIR/issuer.download" -noout >/dev/null 2>&1; then
-            cp "$TLS_DIR/issuer.download" "$TLS_DIR/issuer.pem"
+          # Sectigo serves this AIA object as DER. Detect PEM from its marker;
+          # otherwise perform an explicit DER -> PEM normalization.
+          if grep -a -q -- '-----BEGIN CERTIFICATE-----' "$TLS_DIR/issuer.download"; then
+            openssl x509 -in "$TLS_DIR/issuer.download" -out "$TLS_DIR/issuer.pem"
           else
             openssl x509 -inform DER -in "$TLS_DIR/issuer.download" \
               -out "$TLS_DIR/issuer.pem"
           fi
+          grep -q -- '-----BEGIN CERTIFICATE-----' "$TLS_DIR/issuer.pem"
 
           openssl x509 -in "$TLS_DIR/issuer.pem" -noout \
             -subject -issuer -serial -dates -fingerprint -sha256 \
