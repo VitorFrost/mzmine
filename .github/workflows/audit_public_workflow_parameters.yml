@@ -1,0 +1,121 @@
+name: Audit Public Workflow Parameters
+
+on:
+  push:
+    branches:
+      - agent/public-workflow-parameter-audit
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - src/test/java/io/github/mzmine/modules/batchmode/PublicWorkflowParameterAuditTest.java
+      - .github/workflows/audit_public_workflow_parameters.yml
+      - datasets/public_workflow_manifest.json
+      - datasets/expected/zenodo_14000687_mzmine_settings_inventory.json
+      - scripts/fetch_public_test_data.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-parameters:
+    name: Audit public settings (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java 20
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate and download frozen settings XML
+        shell: bash
+        run: |
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --validate
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --dataset zenodo-14000687-mzmine-processing-settings \
+            --output-dir build/public_validation_data \
+            --timeout 120 \
+            --retries 3
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --dataset zenodo-14000687-mzmine-processing-settings \
+            --output-dir build/public_validation_data \
+            --verify-existing
+
+      - name: Audit parameters on Linux
+        if: runner.os != 'Windows'
+        env:
+          OPEN_OFFLINE_PUBLIC_MZMINE_SETTINGS: ${{ github.workspace }}/build/public_validation_data/zenodo/14000687/MZmine processing settings.xml
+        run: >-
+          ./gradlew test
+          --tests io.github.mzmine.modules.batchmode.PublicWorkflowParameterAuditTest
+          --no-daemon
+          --stacktrace
+
+      - name: Audit parameters on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OPEN_OFFLINE_PUBLIC_MZMINE_SETTINGS: ${{ github.workspace }}\build\public_validation_data\zenodo\14000687\MZmine processing settings.xml
+        run: >-
+          .\gradlew.bat test
+          --tests io.github.mzmine.modules.batchmode.PublicWorkflowParameterAuditTest
+          --no-daemon
+          --stacktrace
+
+      - name: Display audit on Linux
+        if: runner.os != 'Windows'
+        run: cat build/public_workflow_validation/mzmine_settings_parameter_audit.json
+
+      - name: Display audit on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Get-Content build/public_workflow_validation/mzmine_settings_parameter_audit.json
+
+      - name: Remove downloaded XML on Linux
+        if: always() && runner.os != 'Windows'
+        run: rm -rf build/public_validation_data
+
+      - name: Remove downloaded XML on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path build/public_validation_data) {
+            Remove-Item -Recurse -Force build/public_validation_data
+          }
+
+      - name: Upload audit report only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-workflow-parameter-audit-${{ matrix.os }}
+          path: |
+            build/public_workflow_validation/mzmine_settings_parameter_audit.json
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
+          retention-days: 14
