@@ -39,6 +39,19 @@ The independent build must not depend on these artifacts:
 6. Replace account-related UI and service calls with no-account local services where an interface is required.
 7. Add CI checks that reject imports and dependencies matching `io.mzio.users`, `AuthRequiredEvent`, and prohibited Maven coordinates.
 
+## Current validation format scope
+
+The current validation phase prioritizes:
+
+- MZmine-owned, publicly available files such as batch/settings XML and, when suitable public fixtures are available, project files;
+- openly documented and open-source-compatible interchange formats, primarily mzML;
+- public datasets with explicit licenses, frozen URLs, sizes and cryptographic hashes;
+- conversion workflows that can be reproduced with external open or independently licensed converters.
+
+Vendor-specific native formats and readers, including Waters RAW support, are deliberately deferred. They are not an acceptance criterion for the current scientific-equivalence work. External conversion to mzML is acceptable during this phase, provided the converter, version, command, source file provenance and output hash are recorded.
+
+Future native vendor-format validation remains a documented follow-up and must not be interpreted as completed or unnecessary.
+
 ## Branch strategy
 
 - `master` follows the modern upstream history and only contains the CI bridge required by GitHub.
