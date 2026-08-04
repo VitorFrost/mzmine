@@ -14,10 +14,11 @@ not analytically validated.
 ```text
 centroid mass lists
 → scan-to-scan m/z regions of interest
-→ time × ROI matrix
+→ local time × ROI matrices
 → constrained MCR-ALS
 → resolved component profiles and original-scale spectral loadings
 → parameter-perturbation assessment
+→ component reconciliation
 → one MZmine ion feature per accepted component/ROI pair
 ```
 
@@ -36,6 +37,44 @@ Implemented constraints and diagnostics:
 - rejection of almost duplicate temporal profiles;
 - component stability under neighboring ROI-noise and weighting configurations.
 
+## Automatic local chromatographic windows
+
+The scientific core now contains a bounded local-window generator. It is being validated before it
+replaces the single selected matrix in the production task.
+
+For every ROI, the generator calculates an active interval from points above a configurable fraction
+of that ROI height. Nearby active intervals are clustered when:
+
+- the scan gap is within the configured limit; and
+- the resulting union remains below the maximum window width.
+
+The resulting interval is padded, expanded to a minimum scan count when necessary, and constrained
+to a maximum scan count around a robust local apex. The apex signal is calculated from the sum of
+square-root-compressed ROI intensities so that one extremely intense ion does not completely define
+the window.
+
+### Broad-ROI protection
+
+ROIs whose active interval is wider than the maximum local window are not used as clustering
+anchors. They can be assigned to multiple windows as shared background or broad chromatographic
+evidence, but they cannot connect two otherwise independent regions.
+
+If every surviving ROI is broad, bounded apex-centered fallback windows are generated instead of
+silently reverting to a whole-chromatogram matrix.
+
+### Duplicate candidates
+
+Candidate windows with at least 80% overlap in both scan range and assigned ROI set are merged and
+rebounded around the stronger aggregate apex. This is only window-level deduplication. Full
+component reconciliation after MCR fitting remains a separate required step.
+
+Unit tests currently cover:
+
+- two separated regions connected by one broad background ROI;
+- merging nearby coeluting intervals;
+- bounded fallback when only broad ROIs remain;
+- rejection of regions with too few ROIs.
+
 ## Two distinct stability concepts
 
 ### Restart stability
@@ -48,7 +87,7 @@ noise threshold, ROI composition, or weighting.
 
 ### Parameter-perturbation stability
 
-Each reference analysis is now compared with neighboring models:
+Each reference analysis is compared with neighboring models:
 
 1. ROI noise, seed intensity, and minimum reconstructed height divided by the configured noise
    factor;
@@ -113,6 +152,25 @@ These classes are annotations only. The current experimental version does not re
 parameter-sensitive components, because the rejection thresholds still require validation with
 known mixtures and independent public datasets.
 
+## Structured provenance reports
+
+ROI-MCR comments are parsed through one structured provenance parser rather than independent regular
+expressions in each validation test. Reports summarize unique component IDs, not ion-feature row
+counts. This prevents components with many reconstructed ions from dominating stability statistics.
+
+Public validation report schema version 2 includes:
+
+- unique component count;
+- counts of `stable`, `moderate`, and `parameter-sensitive` components;
+- mean restart stability;
+- mean perturbation stability;
+- mean perturbation support;
+- mean rank agreement;
+- minimum and maximum number of perturbation variants represented in the output.
+
+The validation fails if component provenance is absent, confidence counts do not reconcile with the
+unique component count, or fewer than two perturbation variants were executed.
+
 ## Weighting
 
 The ROI-weighting exponent controls how strongly lower-intensity ROIs influence model discovery:
@@ -167,8 +225,9 @@ rather than an undocumented tuning decision.
 - Exactly proportional coelution cannot be separated from MS1 time/mass data alone.
 - Signals sharing the same low-resolution m/z ROI remain inseparable without orthogonal evidence.
 - Ion-specific retention offsets can cause false component splitting.
-- The current task still models one selected connected scan matrix at a time.
-- Local-window generation and reconciliation are not yet integrated into the production task.
+- The production task still models one selected connected scan matrix at a time.
+- The local-window core is implemented and unit-tested but not yet wired into feature production.
+- Component reconciliation between overlapping fitted windows is not yet implemented.
 - Blank scoring is implemented as a reusable scientific core but not yet exposed as paired-file
   processing.
 - Parameter confidence is not equivalent to analytical validation, identification confidence, or a
@@ -178,10 +237,10 @@ rather than an undocumented tuning decision.
 
 The module remains isolated from the global menu and batch allowlist. The required sequence is:
 
-1. compile and unit-test the scientific core;
-2. execute public sample/blank validation on Linux and Windows;
-3. validate perturbation-stability behavior;
-4. add automatic local chromatographic windows;
-5. reconcile duplicate components between overlapping windows;
-6. integrate paired blank evidence;
+1. compile and unit-test the scientific core — passed;
+2. execute public sample/blank validation on Linux and Windows — passed;
+3. validate perturbation-stability behavior — passed as an annotation layer;
+4. implement automatic local chromatographic windows — core implemented, production integration pending;
+5. reconcile duplicate components between overlapping windows — pending;
+6. integrate paired blank evidence — pending;
 7. register the module only after the preceding gates pass.
