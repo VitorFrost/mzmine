@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022 The MZmine Development Team
+ * Copyright (c) 2004-2024 The MZmine Development Team
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -25,20 +25,32 @@
 
 package io.github.mzmine.taskcontrol.impl;
 
-import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.taskcontrol.Task;
 import io.github.mzmine.taskcontrol.TaskPriority;
+import io.github.mzmine.taskcontrol.TaskStatus;
 import javafx.beans.property.Property;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
 /**
- * Wrapper class for Tasks that stores additional information
+ * Wrapper class for tasks that stores additional queue information.
+ *
+ * <p>The wrapper retains JavaFX properties for the existing task table, but it does not schedule
+ * work through JavaFX or access desktop services. Callers at the GUI boundary are responsible for
+ * invoking priority changes from their appropriate UI thread.</p>
  */
 public class WrappedTask {
 
-  private StringProperty name = new SimpleStringProperty("");
+  private final StringProperty name = new SimpleStringProperty("");
+  private final Property<TaskPriority> priority;
+  private Task task;
+  private volatile WorkerThread assignedTo;
+
+  public WrappedTask(Task task, TaskPriority priority) {
+    this.task = task;
+    this.priority = new SimpleObjectProperty<>(priority);
+  }
 
   public final String getName() {
     return name.get();
@@ -52,31 +64,23 @@ public class WrappedTask {
     return name;
   }
 
-  private Task task;
-  private Property<TaskPriority> priority;
-  private WorkerThread assignedTo;
-
-  public WrappedTask(Task task, TaskPriority priority) {
-    this.task = task;
-    this.priority = new SimpleObjectProperty<>(priority);
-  }
-
   /**
-   * @return Returns the priority.
+   * @return the current priority
    */
   TaskPriority getPriority() {
     return priority.getValue();
   }
 
   /**
-   * @param priority The priority to set.
+   * Change the model priority directly, without dispatching to JavaFX from the controller core.
    */
   void setPriority(TaskPriority priority) {
-    MZmineCore.runLater(() -> this.priority.setValue(priority));
-    if (assignedTo != null) {
+    this.priority.setValue(priority);
+    final WorkerThread worker = assignedTo;
+    if (worker != null) {
       switch (priority) {
-        case HIGH -> assignedTo.setPriority(Thread.MAX_PRIORITY);
-        case NORMAL -> assignedTo.setPriority(Thread.NORM_PRIORITY);
+        case HIGH -> worker.setPriority(Thread.MAX_PRIORITY);
+        case NORMAL -> worker.setPriority(Thread.NORM_PRIORITY);
       }
     }
   }
@@ -86,7 +90,7 @@ public class WrappedTask {
   }
 
   /**
-   * @return Returns the assigned.
+   * @return whether this wrapper has already been assigned to a worker
    */
   boolean isAssigned() {
     return assignedTo != null;
@@ -97,12 +101,13 @@ public class WrappedTask {
   }
 
   /**
-   * @return Returns the task.
+   * @return the actual or compact finished task
    */
   public synchronized Task getActualTask() {
     return task;
   }
 
+  @Override
   public synchronized String toString() {
     return task.getTaskDescription();
   }
@@ -111,4 +116,7 @@ public class WrappedTask {
     task = new FinishedTask(task);
   }
 
+  synchronized void removeTaskReference(TaskStatus finalStatus, String finalErrorMessage) {
+    task = new FinishedTask(task, finalStatus, finalErrorMessage);
+  }
 }

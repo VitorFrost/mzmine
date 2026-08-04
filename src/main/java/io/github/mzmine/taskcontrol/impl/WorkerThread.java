@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022 The MZmine Development Team
+ * Copyright (c) 2004-2024 The MZmine Development Team
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -25,22 +25,24 @@
 
 package io.github.mzmine.taskcontrol.impl;
 
-import io.github.mzmine.main.MZmineCore;
+import io.github.mzmine.taskcontrol.AbstractTask;
 import io.github.mzmine.taskcontrol.Task;
 import io.github.mzmine.taskcontrol.TaskStatus;
-import io.github.mzmine.util.ExceptionUtils;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Task controller worker thread, this thread will process one task and then finish
+ * Worker thread that executes one task and then terminates.
+ *
+ * <p>Error handling is headless-safe: failures are written to the task status/error message and to
+ * the log. Displaying a dialog is a responsibility of listeners in the GUI layer.</p>
  */
 class WorkerThread extends Thread {
 
-  private Logger logger = Logger.getLogger(this.getClass().getName());
+  private static final Logger logger = Logger.getLogger(WorkerThread.class.getName());
 
-  private WrappedTask wrappedTask;
-  private boolean finished = false;
+  private final WrappedTask wrappedTask;
+  private volatile boolean finished;
 
   WorkerThread(WrappedTask wrappedTask) {
     super("Thread executing task " + wrappedTask);
@@ -48,67 +50,55 @@ class WorkerThread extends Thread {
     wrappedTask.assignTo(this);
   }
 
-  /**
-   * @see java.lang.Runnable#run()
-   */
+  @Override
   public void run() {
-
-    Task actualTask = wrappedTask.getActualTask();
+    final Task actualTask = wrappedTask.getActualTask();
+    TaskStatus finalStatus = actualTask.getStatus();
+    String finalErrorMessage = actualTask.getErrorMessage();
 
     try {
-
-      // Log the start (INFO level events go to the Status bar, too)
       logger.info("Starting processing of task " + actualTask.getTaskDescription());
-
-      // Process the actual task
       actualTask.run();
+      finalStatus = actualTask.getStatus();
+      finalErrorMessage = actualTask.getErrorMessage();
 
-      // Check if task finished with an error
-      if (actualTask.getStatus() == TaskStatus.ERROR) {
-
-        String errorMsg = actualTask.getErrorMessage();
-        if (errorMsg == null)
-          errorMsg = "Unspecified error";
-
-        // Log the error
-        logger.severe("Error of task " + actualTask.getTaskDescription() + ": " + errorMsg);
-
-        MZmineCore.getDesktop().displayErrorMessage(errorMsg);
+      if (finalStatus == TaskStatus.ERROR) {
+        finalErrorMessage = normalizedErrorMessage(finalErrorMessage);
+        ensureErrorState(actualTask, finalErrorMessage);
+        logger.severe(
+            "Error of task " + actualTask.getTaskDescription() + ": " + finalErrorMessage);
       } else {
-        // Log the finish
         logger.info("Processing of task " + actualTask.getTaskDescription() + " done, status "
-            + actualTask.getStatus());
+            + finalStatus);
       }
-
-      /*
-       * This is important to allow the garbage collector to remove the task, while keeping the task
-       * description in the "Tasks in progress" window
-       */
-      wrappedTask.removeTaskReference();
-
-    } catch (Throwable e) {
-
-      /*
-       * This should never happen, it means the task did not handle its exception properly, or there
-       * was some severe error, like OutOfMemoryError
-       */
-
-      logger.log(Level.SEVERE,
-          "Unhandled exception " + e + " while processing task " + actualTask.getTaskDescription(),
-          e);
-
-      e.printStackTrace();
-
-      MZmineCore.getDesktop().displayErrorMessage("Unhandled exception in task "
-          + actualTask.getTaskDescription() + ": " + ExceptionUtils.exceptionToString(e));
-
+    } catch (Throwable throwable) {
+      finalStatus = TaskStatus.ERROR;
+      finalErrorMessage = "Unhandled exception in task "
+          + actualTask.getTaskDescription() + ": " + throwable;
+      ensureErrorState(actualTask, finalErrorMessage);
+      logger.log(Level.SEVERE, finalErrorMessage, throwable);
+    } finally {
+      try {
+        // Preserve explicit diagnostics even for Task implementations that do not extend
+        // AbstractTask.
+        wrappedTask.removeTaskReference(finalStatus, finalErrorMessage);
+      } finally {
+        finished = true;
+      }
     }
+  }
 
-    /*
-     * Mark this thread as finished
-     */
-    finished = true;
+  private static String normalizedErrorMessage(final String errorMessage) {
+    return errorMessage == null || errorMessage.isBlank() ? "Unspecified error" : errorMessage;
+  }
 
+  private static void ensureErrorState(final Task task, final String errorMessage) {
+    if (task instanceof AbstractTask abstractTask) {
+      abstractTask.setErrorMessage(errorMessage);
+      if (abstractTask.getStatus() != TaskStatus.ERROR) {
+        abstractTask.setStatus(TaskStatus.ERROR);
+      }
+    }
   }
 
   boolean isFinished() {
