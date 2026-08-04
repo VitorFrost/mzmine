@@ -1,109 +1,133 @@
-# mzmine — Open Offline Fork
+# mzmine Open Offline Fork
 
-> **This is an independent community fork of [mzmine](https://github.com/mzmine/mzmine).**
-> It runs entirely offline, requires no account or login, and depends on **no proprietary `io.mzio` binaries**.
-> The fork goal is to restore the fully open-source experience of mzmine 3.9 while tracking scientific improvements from the 4.x lineage.
+> Independent, MIT-licensed fork based on the public mzmine 3.9.0 source line.
+> Runtime operation is offline, requires no account, and uses no proprietary `io.mzio` binaries.
 
-[![Open Offline Build](https://img.shields.io/badge/build-open--offline-brightgreen)](https://github.com/VitorFrost/mzmine/tree/open-offline-main)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.txt)
-[![Fork base](https://img.shields.io/badge/upstream-mzmine%203.9.0-orange)](https://github.com/mzmine/mzmine/releases/tag/v3.9.0)
+This project preserves the open scientific-processing core of mzmine 3.9 while selectively adapting
+publicly licensed improvements from later history and implementing fork-local capabilities where a
+validated scientific requirement exists.
 
-mzmine is an open-source software for mass spectrometry data processing, covering LC-MS, GC-MS, IMS, and MS imaging workflows.
+The current application version remains **3.9.1**. The next release target is not a wholesale copy of
+modern upstream mzmine. It is a documented and test-backed target:
 
-More information about the original project: [mzmine.github.io](http://mzmine.github.io)
+> **Functional parity with the public LC-MS scientific core of mzmine v4.0.8.**
 
----
+Parity means equivalent scientific behavior for the declared workflows and inputs within recorded
+tolerances. It does not imply identical internal architecture, GUI layout, binary compatibility, or
+support for proprietary account, licensing, cloud, or vendor-restricted infrastructure.
 
-## Why this fork?
+## Current status
 
-Starting from mzmine 4.0, the upstream project introduced:
+### Completed
 
-- mandatory **mzio account login** before running the application;
-- closed-source proprietary JARs (`io.mzio:user-client`, `io.mzio:user-management`, etc.) shipped as local Maven binaries;
-- automatic network telemetry and update checks.
+- exact public mzmine 3.9.0 base preserved as the scientific regression reference;
+- Java 20 compilation and tests on Linux and Windows;
+- no-login headless startup;
+- startup telemetry and automatic update checks disabled;
+- deterministic mzML import, mass detection, chromatogram building, resolving, alignment, gap
+  filling, and legacy CSV export;
+- direct-module and XML-batch output compared with an untouched 3.9.0 checkout;
+- governed public-data manifests with size, license, URL, and SHA-256 verification;
+- frozen public LC-MS sample, technical replicate, analytical blank, and published MZmine 3.4.27
+  settings;
+- public 12-stage workflow executed successfully on Linux and Windows;
+- byte-identical 22,422-byte final CSV with 176 data rows;
+- local `TaskService`, synchronous task adapters, bounded Java 20 platform-thread executors,
+  JavaFX/Desktop scheduling decoupling, and fork-local deterministic `GroupedTask`.
 
-This fork removes all of the above, returning mzmine to its roots as a zero-dependency, fully open-source, offline-capable research tool accessible to any laboratory worldwide — including those without internet access or institutional accounts.
+### In progress
 
-See [OPEN_OFFLINE_FORK.md](OPEN_OFFLINE_FORK.md) for the full technical charter and porting record.
+- differential validation against the public mzmine v4.0.8 source line;
+- per-module 3.9 → 4.0.8 → open-offline compatibility matrix;
+- broader mzML conformance, including profile, positive, mixed-polarity, binary encoding, and richer
+  precursor metadata;
+- MS2 association, spectral-library matching, ion/adduct identity, and MSe reference workflows;
+- memory-map lifecycle, cleanup, error/exit-code, cancellation, and load benchmarks;
+- deterministic one-, two-, and N-thread comparisons;
+- portable Windows and Linux release artifacts tested from a clean environment.
 
----
+See:
+
+- [`OPEN_OFFLINE_FORK.md`](OPEN_OFFLINE_FORK.md) — project charter and scope;
+- [`docs/public_validation/MZMINE_4_PARITY.md`](docs/public_validation/MZMINE_4_PARITY.md) — current
+  parity matrix;
+- [`docs/milestones/MILESTONE_4_0_CORE_PARITY.md`](docs/milestones/MILESTONE_4_0_CORE_PARITY.md) —
+  active implementation sequence;
+- [`docs/public_validation/DATASETS.md`](docs/public_validation/DATASETS.md) — governed public corpus.
 
 ## Branch strategy
 
 | Branch | Purpose |
 |---|---|
-| `master` | Tracks upstream mzmine for CI bridging only |
-| `open-offline-main` | **Stable integration branch** — this is what you want |
-| `agent/open-offline-base` | Current changes under active validation |
-| `agent/*` | Individual feature/decoupling work in progress |
+| `master` | Modern upstream mirror/history plus the minimum CI bridge; not the fork integration line |
+| `open-offline-main` | Stable integration branch for the independent open-offline fork |
+| `agent/*` | Focused implementation and validation branches targeting `open-offline-main` |
 
----
-
-## License
-
-mzmine source code is distributed under the [MIT license](LICENSE.txt). This fork inherits and preserves that license. No proprietary code is included.
-
----
+The branch is intentionally independent. It is thousands of commits behind the modern `master` by
+design; progress is measured by frozen functional parity gates, not by merging the current upstream
+tree.
 
 ## Building
 
 ### Requirements
 
-- Java Development Kit (JDK) **20 or newer** — [jdk.java.net](http://jdk.java.net)
-- No account, no internet connection required at build or runtime.
-
-### Build
+- JDK 20;
+- Git;
+- network access for a clean dependency-resolution build unless a complete Gradle cache or future
+  frozen offline dependency repository is available.
 
 ```bash
-./gradlew clean build
+./gradlew clean test classes --no-daemon
 ```
 
-On Windows:
+Windows:
 
 ```bat
-gradlew.bat clean build
+gradlew.bat clean test classes --no-daemon
 ```
 
-The distribution will be placed in `build/jpackage`.
+The application runtime is designed to operate without an account or mandatory network access.
+A clean source build is not yet guaranteed to resolve all third-party dependencies without network
+access; this distinction is tracked as a release gate.
 
-### Verify no proprietary dependencies
+## Validation
 
-Before any release, run:
+Run the standard local checks:
 
 ```bash
-# Check source for any remaining io.mzio references
-git grep -n -E "io\.mzio|AuthRequiredEvent|CurrentUserService|UserAuthStore|LicenseUtils"
-
-# Check dependency graph
-./gradlew dependencies | grep -E "io\.mzio"
+python scripts/verify_open_offline.py
+python scripts/fetch_public_test_data.py --validate
+python -m unittest discover -s scripts/tests -p "test_*.py" -v
+./gradlew clean test classes --no-daemon
+python scripts/smoke_test_headless.py
+python scripts/test_headless_batch.py
 ```
 
-Both commands should produce **no output** on a clean build.
+The complete CI additionally compares the frozen scientific baseline with an untouched mzmine 3.9.0
+checkout and runs governed public-corpus workflows when requested by their dedicated actions.
 
-### Run tests
+## Independence policy
 
-```bash
-./gradlew test
-```
+The fork must not include or depend on:
 
----
+- proprietary `io.mzio` binaries;
+- reconstructed or decompiled implementations;
+- account, authentication, or license bypasses;
+- fake entitlement or “always authenticated” behavior;
+- mandatory cloud services for scientific processing.
 
-## Milestone status
+Where later public source depends on unavailable proprietary services, contributors must either:
 
-- [x] Fork created from exact mzmine 3.9.0 commit
-- [x] Source/JAR audit for all prohibited `io.mzio` components
-- [x] CI added for Linux and Windows (Java 20)
-- [x] Google Analytics telemetry replaced with inert facade
-- [x] Automatic network update checks disabled
-- [ ] Gradle build completes with zero `io.mzio` dependencies
-- [ ] GUI starts without network access
-- [ ] Headless batch execution
-- [ ] mzML import and deterministic reference output
-- [ ] `user-client` stub fully replaces closed binary
-- [ ] TaskController fully decoupled from desktop/JavaFX services
+1. isolate and omit the unrelated integration;
+2. implement a new local open interface with independently defined behavior; or
+3. classify the capability as out of scope.
 
----
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the required provenance and validation process.
 
-## Contributing
+## License and attribution
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on porting commits from upstream, implementing stubs, and submitting pull requests.
+The source is distributed under the MIT license inherited from the public mzmine source tree. Dataset
+licenses and attribution requirements are tracked separately in the governed manifests and public
+validation documentation.
+
+This is an independent community fork and is not an official mzmine release.
