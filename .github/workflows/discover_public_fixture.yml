@@ -85,9 +85,8 @@ jobs:
           printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-aia-url.txt"
           printf '%s\n' "$AIA_URL" >"$TLS_DIR/issuer-fetch-url.txt"
 
-          # The CA Issuers URI is supplied inside the signed leaf certificate. Its
-          # HTTP transport is not trusted by itself: the downloaded issuer is accepted
-          # only when OpenSSL verifies leaf -> issuer -> system root.
+          # The HTTP transport is not trusted by itself. The issuer is retained only
+          # when it cryptographically verifies the leaf through the system root store.
           curl --fail --show-error --silent --location \
             --user-agent 'mzmine-open-offline-certificate-discovery/1' \
             --connect-timeout 20 --max-time 60 \
@@ -110,61 +109,47 @@ jobs:
             "$LEAF" | tee "$TLS_DIR/verify-result.txt"
           grep -q ': OK$' "$TLS_DIR/verify-result.txt"
 
-          cat /etc/ssl/certs/ca-certificates.crt "$TLS_DIR/issuer.pem" \
-            >"$TLS_DIR/verified-ca-bundle.pem"
-
       - name: Download through verified explicit FTPS
         shell: bash
         run: |
           set -euo pipefail
-          FILE_URL="$(python -c 'import json; print(json.load(open("build/public_fixture_discovery/fixture_resolution.json"))["resolved_file_url"])')"
-          DEST_DIR="build/public_fixture_discovery/download"
-          DEST="$DEST_DIR/Method1_Set277193_100_BOST-06537.mzML"
-          mkdir -p "$DEST_DIR"
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --ssl-reqd \
-            --ftp-ssl \
-            --ftp-pasv \
-            --cacert build/public_fixture_discovery/tls/verified-ca-bundle.pem \
-            --user 'anonymous:mzmine-open-offline@example.invalid' \
-            --connect-timeout 30 \
-            --max-time 240 \
-            --retry 2 \
-            --retry-delay 2 \
-            --output "$DEST.part" \
-            "$FILE_URL"
-          test "$(stat -c %s "$DEST.part")" -eq 16978328
-          mv "$DEST.part" "$DEST"
+          timeout 300s python scripts/discover_massive_fixture.py \
+            --task f6100fda35654d40a061715874c699b0 \
+            --accession MSV000101091 \
+            --listed-path "f.MSV000101091/ccms_peak/Metabolomics raw data/Method1_Set277193_100_BOST-06537.mzML" \
+            --expected-size 16978328 \
+            --output-directory build/public_fixture_discovery \
+            --timeout 180 \
+            --ftps-issuer-ca-file build/public_fixture_discovery/tls/issuer.pem
 
-      - name: Calculate SHA-256 and write frozen report
+      - name: Add certificate fingerprint to frozen report
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import hashlib
           import json
+          import re
           from pathlib import Path
 
           output = Path("build/public_fixture_discovery")
-          source = output / "download" / "Method1_Set277193_100_BOST-06537.mzML"
-          digest = hashlib.sha256(source.read_bytes()).hexdigest()
-          report = json.loads((output / "fixture_resolution.json").read_text(encoding="utf-8"))
+          report_path = output / "fixture_report.json"
+          report = json.loads(report_path.read_text(encoding="utf-8"))
           fingerprint_line = next(
               line for line in (output / "tls" / "leaf-summary.txt").read_text().splitlines()
               if "Fingerprint=" in line
           )
-          report.update({
-              "size_bytes": source.stat().st_size,
-              "sha256": digest,
-              "transfer_transport": "explicit FTPS with AIA intermediate verified to system roots",
-              "leaf_certificate_sha256": fingerprint_line.split("=", 1)[1]
-                  .replace(":", "").strip().lower(),
-              "local_file": str(source.resolve()),
-          })
-          (output / "fixture_report.json").write_text(
+          fingerprint = fingerprint_line.split("=", 1)[1].replace(":", "").strip().lower()
+          if not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+              raise SystemExit("Invalid leaf certificate SHA-256 fingerprint")
+          if report.get("size_bytes") != 16978328:
+              raise SystemExit("Unexpected fixture byte size")
+          if not re.fullmatch(r"[0-9a-f]{64}", str(report.get("sha256", ""))):
+              raise SystemExit("Invalid fixture SHA-256")
+          report["leaf_certificate_sha256"] = fingerprint
+          report["certificate_chain_verification"] = (
+              "leaf SAN checked; AIA issuer verified to operating-system roots"
+          )
+          report_path.write_text(
               json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
           print(json.dumps(report, indent=2, sort_keys=True))
@@ -177,7 +162,6 @@ jobs:
           rm -rf build/public_fixture_discovery/tls/certs
           rm -f build/public_fixture_discovery/tls/issuer.download
           rm -f build/public_fixture_discovery/tls/issuer.pem
-          rm -f build/public_fixture_discovery/tls/verified-ca-bundle.pem
           rm -f build/public_fixture_discovery/tls/leaf-full.txt
 
       - name: Upload metadata and TLS diagnostics only
