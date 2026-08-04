@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2022 The MZmine Development Team
+ * Copyright (c) 2004-2024 The MZmine Development Team
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -27,40 +27,49 @@ package io.github.mzmine.taskcontrol.impl;
 
 import io.github.mzmine.taskcontrol.AbstractTask;
 import io.github.mzmine.taskcontrol.Task;
+import io.github.mzmine.taskcontrol.TaskStatus;
 import java.time.Instant;
 
 /**
- * This class serves as a replacement for Task within the task controller queue, after the Task is
- * finished. This allows the garbage collector to remove the memory occupied by the actual Task
- * while keeping the task description in the Tasks in progress window, until all tasks are finished.
+ * Compact replacement for a completed task in the controller queue.
+ *
+ * <p>This releases the original task object while preserving description, progress, final status,
+ * and error text for headless diagnostics and the task view.</p>
  */
 public class FinishedTask extends AbstractTask {
 
-  private String description;
-  private double finishedPercentage;
+  private final String description;
+  private final double finishedPercentage;
 
   public FinishedTask(Task task) {
-    super(null, Instant.now()); // date is irrelevant
-    setStatus(task.getStatus());
-    setErrorMessage(task.getErrorMessage());
+    this(task, task.getStatus(), task.getErrorMessage());
+  }
+
+  FinishedTask(Task task, TaskStatus finalStatus, String finalErrorMessage) {
+    super(null, Instant.now()); // date is irrelevant for the compact queue record
+    setStatus(finalStatus);
+    setErrorMessage(finalErrorMessage);
     description = task.getTaskDescription();
     finishedPercentage = task.getFinishedPercentage();
   }
 
+  @Override
   public String getTaskDescription() {
     return description;
   }
 
+  @Override
   public void run() {
-    // ignore any attempt to run this task, because it is finished
+    // Ignore attempts to run a task that has already completed.
   }
 
+  @Override
   public void cancel() {
-    // ignore any attempt to cancel this task, because it is finished
+    // Ignore attempts to cancel a task that has already completed.
   }
 
+  @Override
   public double getFinishedPercentage() {
     return finishedPercentage;
   }
-
 }
