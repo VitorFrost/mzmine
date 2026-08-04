@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "generated_for": "MZmine Open Offline public validation",
+  "default_output_directory": "build/public_validation_data",
+  "policy": {
+    "require_verified_reuse_terms": true,
+    "require_expected_size": true,
+    "require_sha256": true,
+    "allow_unverified_downloads": false,
+    "commit_large_test_data": false
+  },
+  "datasets": [
+    {
+      "id": "hupo-psi-tiny-pwiz-1.1",
+      "tier": 0,
+      "status": "candidate",
+      "download_enabled": false,
+      "purpose": "Indexed mzML 1.1 format-conformance and metadata import test",
+      "source": {
+        "type": "github",
+        "repository": "HUPO-PSI/mzML",
+        "commit": "c43c4ea57ad73abd72ff3b55ebd78827a73fab61",
+        "path": "examples/tiny.pwiz.1.1.mzML",
+        "page_url": "https://github.com/HUPO-PSI/mzML/blob/c43c4ea57ad73abd72ff3b55ebd78827a73fab61/examples/tiny.pwiz.1.1.mzML",
+        "download_url": "https://raw.githubusercontent.com/HUPO-PSI/mzML/c43c4ea57ad73abd72ff3b55ebd78827a73fab61/examples/tiny.pwiz.1.1.mzML"
+      },
+      "license": {
+        "status": "pending-verification",
+        "identifier": null,
+        "evidence_url": null,
+        "note": "The repository is public, but explicit reuse terms for the example file must be recorded before automated download is enabled."
+      },
+      "files": [
+        {
+          "relative_path": "hupo-psi/tiny.pwiz.1.1.mzML",
+          "expected_size_bytes": null,
+          "sha256": null
+        }
+      ],
+      "instrument": "Mixed illustrative source metadata",
+      "polarity": "mixed-or-example",
+      "acquisition": "centroid MS1/MSn example",
+      "expected_assertions": [
+        "indexed mzML container is accepted",
+        "MS1 and MSn metadata are parsed",
+        "binary m/z and intensity arrays are repeatable",
+        "precursor metadata is retained",
+        "repeated imports produce identical scan summaries"
+      ]
+    },
+    {
+      "id": "mzmine-official-workshop-reference",
+      "tier": 1,
+      "status": "reference-only",
+      "download_enabled": false,
+      "purpose": "Behavioral reference from the official public MZmine integration suite",
+      "source": {
+        "type": "github",
+        "repository": "mzmine/mzmine",
+        "commit": "01c8cf3db35d83e8c652c0c3255a67f1189221de",
+        "path": "mzmine-community/src/test/resources/rawdatafiles/integration_tests/workshop_dataset",
+        "page_url": "https://github.com/mzmine/mzmine/tree/01c8cf3db35d83e8c652c0c3255a67f1189221de/mzmine-community/src/test/resources/rawdatafiles/integration_tests/workshop_dataset",
+        "download_url": null
+      },
+      "license": {
+        "status": "verified-source-code-reference",
+        "identifier": "MIT",
+        "evidence_url": "https://github.com/mzmine/mzmine/blob/01c8cf3db35d83e8c652c0c3255a67f1189221de/LICENSE.txt",
+        "note": "Batch files, tests, and expected-output fixtures are public MIT references. Raw-file provenance is handled separately."
+      },
+      "files": [],
+      "instrument": "LC-MS workshop dataset",
+      "polarity": "not-frozen",
+      "acquisition": "official integration reference",
+      "expected_assertions": [
+        "public batch modules are inventoried",
+        "expected result columns and tolerances are mapped",
+        "raw data are not downloaded until provenance is verified"
+      ]
+    },
+    {
+      "id": "massive-msv000101091-small-lcms-01",
+      "tier": 2,
+      "status": "candidate",
+      "download_enabled": false,
+      "purpose": "Small real-world mzML for import, performance, and deterministic feature tests",
+      "source": {
+        "type": "massive",
+        "accession": "MSV000101091",
+        "path": "ccms_peak/Metabolomics raw data/Method1_Set277193_100_BOST-06537.mzML",
+        "page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000101091",
+        "files_page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset_files.jsp?task=f6100fda35654d40a061715874c699b0",
+        "download_url": null
+      },
+      "license": {
+        "status": "pending-dataset-page-verification",
+        "identifier": null,
+        "evidence_url": null,
+        "note": "MassIVE commonly uses CC0, but this individual dataset license must be captured explicitly before download is enabled."
+      },
+      "files": [
+        {
+          "relative_path": "massive/MSV000101091/Method1_Set277193_100_BOST-06537.mzML",
+          "expected_size_bytes": 16978328,
+          "sha256": null
+        }
+      ],
+      "instrument": "Metabolomics platform; exact instrument metadata pending file inspection",
+      "polarity": "pending-inspection",
+      "acquisition": "centroid mzML candidate",
+      "expected_assertions": [
+        "scan count and RT range are stable",
+        "mass detection and feature count are deterministic",
+        "runtime and peak memory are recorded",
+        "results are stable with one and multiple worker threads"
+      ]
+    },
+    {
+      "id": "massive-msv000089848-blanks-replicates",
+      "tier": 3,
+      "status": "candidate",
+      "download_enabled": false,
+      "purpose": "Blank, sample, and technical-replicate validation corpus",
+      "source": {
+        "type": "massive",
+        "accession": "MSV000089848",
+        "path": null,
+        "page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000089848",
+        "download_url": null
+      },
+      "license": {
+        "status": "dataset-page-reports-cc0",
+        "identifier": "CC0-1.0",
+        "evidence_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000089848",
+        "note": "Exact minimal blank/sample/replicate file paths and hashes remain to be frozen."
+      },
+      "files": [],
+      "instrument": "Q Exactive",
+      "polarity": "pending-subset-selection",
+      "acquisition": "profiles with solvent/media blanks and technical replicates",
+      "expected_assertions": [
+        "blank/sample matching is deterministic",
+        "technical-replicate agreement is quantified",
+        "alignment and gap filling are repeatable",
+        "blank subtraction classifications are auditable"
+      ]
+    },
+    {
+      "id": "massive-msv000091372-waters-fastdda",
+      "tier": 4,
+      "status": "candidate",
+      "download_enabled": false,
+      "purpose": "Public Waters acquisition compatibility before any private Waters file is used",
+      "source": {
+        "type": "massive",
+        "accession": "MSV000091372",
+        "path": null,
+        "page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000091372",
+        "files_page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset_files.jsp?task=1b1d9d5b52324716b4636e829261c9fc",
+        "download_url": null
+      },
+      "license": {
+        "status": "verified",
+        "identifier": "CC0-1.0",
+        "evidence_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000091372",
+        "note": "Dataset was deposited specifically as a Waters Synapt XS FastDDA negative-mode test set. Exact file paths, sizes, and hashes remain to be frozen."
+      },
+      "files": [],
+      "instrument": "Waters Synapt XS",
+      "polarity": "negative",
+      "acquisition": "FastDDA",
+      "expected_assertions": [
+        "vendor conversion workflow is documented",
+        "converted mzML import preserves polarity and precursor metadata",
+        "MS level and scan-type semantics are reported without overinterpretation",
+        "feature processing is deterministic"
+      ]
+    },
+    {
+      "id": "massive-msv000097125-waters-lipidomics",
+      "tier": 4,
+      "status": "reserve-candidate",
+      "download_enabled": false,
+      "purpose": "Additional Waters SYNAPT G2-Si lipidomics validation",
+      "source": {
+        "type": "massive",
+        "accession": "MSV000097125",
+        "path": null,
+        "page_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000097125",
+        "download_url": null
+      },
+      "license": {
+        "status": "dataset-page-reports-cc0",
+        "identifier": "CC0-1.0",
+        "evidence_url": "https://massive.ucsd.edu/ProteoSAFe/dataset.jsp?accession=MSV000097125",
+        "note": "Reserve set; exact minimal files remain to be selected."
+      },
+      "files": [],
+      "instrument": "Waters SYNAPT G2-Si",
+      "polarity": "pending-subset-selection",
+      "acquisition": "lipidomics",
+      "expected_assertions": [
+        "open-format conversion/import compatibility",
+        "lipid-like chromatographic features are processed repeatably"
+      ]
+    }
+  ]
+}

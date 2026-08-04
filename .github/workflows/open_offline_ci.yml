@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   independence-audit:
-    name: Verify no proprietary login dependencies
+    name: Verify independence and public-data policy
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -25,6 +25,12 @@ jobs:
 
       - name: Audit source, build files, and JARs
         run: python scripts/verify_open_offline.py
+
+      - name: Validate public dataset manifest
+        run: python scripts/fetch_public_test_data.py --validate
+
+      - name: Test fail-closed dataset policy
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
 
   compile-and-test:
     name: Compile and test (${{ matrix.os }})
