@@ -1,6 +1,7 @@
 # ROI-MCR bounded local-window fitting
 
-Status: scientific core implemented and under CI validation; not production-active.
+Status: scientific core implemented, technically validated, and validated on the frozen public
+sample/blank pair; not production-active.
 
 ## Purpose
 
@@ -38,8 +39,7 @@ This is the same scientific priority used by the memory-safe whole-run builder:
 After selecting the highest-quality ROIs, variables are reordered deterministically by mean m/z and
 ROI ID before matrix construction. The selected global ROI indices are retained in every fit result.
 
-The first public fitting gate will characterize several limits rather than asserting that one value
-is universally correct. A production limit must be exposed as a parameter and stored in provenance.
+A production limit must be exposed as a parameter and stored in provenance.
 
 ## Scale handling
 
@@ -81,6 +81,64 @@ The aggregate summary records:
 
 A failed local fit remains countable and cannot be silently interpreted as absence of analytes.
 
+## Public bounded-width benchmark
+
+Frozen public pair:
+
+- sample: `Banane_30ngmL_002.mzML`;
+- blank: `blank_001.mzML`.
+
+Common negative-MS1 range:
+
+- sample: 4,084 scans, 6,203 retained ROIs, 56 windows;
+- blank: 4,111 scans, 4,446 retained ROIs, 52 windows;
+- maximum input width: 1,509 sample ROIs and 1,432 blank ROIs;
+- no ROI was discarded by the 8,000-ROI whole-run retention limit.
+
+The first benchmark used Pareto weighting, maximum rank 4, two restarts and 120 ALS iterations. It
+characterized 64, 128 and 256 selected ROIs per window without parameter perturbations.
+
+### Ubuntu results
+
+| Limit | Sample components | Blank components | Sample explained | Blank explained | Sample time | Blank time |
+|---:|---:|---:|---:|---:|---:|---:|
+| 64 | 74 | 56 | 0.750823 | 0.854950 | 1.084 s | 1.018 s |
+| 128 | 76 | 56 | 0.751182 | 0.855225 | 1.643 s | 1.490 s |
+| 256 | 75 | 56 | 0.751455 | 0.855273 | 2.972 s | 3.163 s |
+
+All 56 sample and 52 blank windows fitted successfully at every limit. Mean restart stability was
+at least 0.9896 in the sample and 0.9944 in the blank.
+
+Windows and Ubuntu produced identical scientific outputs after excluding paths and elapsed times:
+
+- identical ROI/window counts;
+- identical rank distributions;
+- identical component totals;
+- identical original-scale explained signal;
+- identical restart stability;
+- zero failed windows.
+
+### Limit decision
+
+Increasing the sample limit from 64 to 256:
+
+- increased selected ROI assignments from 3,584 to 14,153;
+- increased Ubuntu fitting time from 1.084 s to 2.972 s;
+- changed the component total only from 74 to 75;
+- improved mean original-scale explained signal by only 0.000631.
+
+The blank component total remained 56 at all limits. The increase from 64 to 256 improved blank
+explained signal by only 0.000323.
+
+Decision:
+
+- **64 ROIs/window is the current production candidate** for the first integrated local path;
+- 128 and 256 remain diagnostic options, not default choices;
+- 64 is not claimed to be universally optimal;
+- the selected limit must remain explicit in provenance;
+- a later known-mixture benchmark must test whether the quality ranking drops diagnostically weak but
+  chemically important minor ions.
+
 ## Current safeguards
 
 - deterministic variable selection;
@@ -88,28 +146,31 @@ A failed local fit remains countable and cannot be silently interpreted as absen
 - non-negative MCR-ALS constraints inherited from the validated core;
 - cancellation propagation;
 - original-scale reconstruction metrics;
-- focused tests for independent windows, deterministic retention and cancellation.
+- focused tests for independent windows, deterministic retention and cancellation;
+- public whole-run fitting on Ubuntu and Windows;
+- fail-closed reporting when more than 10% of local windows fail.
 
 ## Deliberate limitations
 
-The first local fitter does not yet:
+The local fitter does not yet:
 
 - run parameter perturbations for every window;
-- create output features;
-- reconcile duplicate components between overlapping windows;
+- create output features in the production task;
+- reconcile duplicate components between overlapping windows in public data;
 - compare paired sample and blank components;
 - register the module globally.
 
-Those operations follow only after public fitting demonstrates acceptable runtime, rank behavior,
-failure count and sensitivity to the ROI-variable limit.
+The public benchmark used only two restarts and 120 iterations to characterize matrix width. These
+settings are not automatically the final production settings.
 
 ## Acceptance gate for production integration
 
-1. all synthetic local-fitting tests pass;
-2. public sample and blank windows fit on Ubuntu and Windows;
-3. scientific outputs are deterministic across operating systems;
-4. failed-window count and variable truncation are explicitly reported;
-5. runtime remains bounded for the complete chromatogram;
-6. rank and component signatures remain acceptably stable over neighboring ROI limits;
-7. reconciliation does not merge distinct coeluting components;
-8. the full standard CI and untouched-MZmine regression remain green.
+1. all synthetic local-fitting tests pass — **passed**;
+2. public sample and blank windows fit on Ubuntu and Windows — **passed**;
+3. scientific outputs are deterministic across operating systems — **passed**;
+4. failed-window count and variable truncation are explicitly reported — **passed**;
+5. runtime remains bounded for the complete chromatogram — **passed for the reference pair**;
+6. rank remains acceptably stable over neighboring ROI limits — **passed for component totals and
+   rank distributions on the reference pair**;
+7. reconciliation does not merge distinct coeluting components — pending public characterization;
+8. the full standard CI and untouched-MZmine regression remain green — **passed**.
