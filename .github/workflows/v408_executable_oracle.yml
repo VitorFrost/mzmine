@@ -19,6 +19,7 @@ on:
     paths:
       - ".github/workflows/v408_executable_oracle.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
+      - "datasets/parity/v408_import_mass_detection_tolerances_v1.json"
       - "datasets/public_validation_manifest.json"
       - "oracle/v408-boundaries/**"
       - "oracle/v408-executable/**"
@@ -37,6 +38,7 @@ on:
     paths:
       - ".github/workflows/v408_executable_oracle.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
+      - "datasets/parity/v408_import_mass_detection_tolerances_v1.json"
       - "datasets/public_validation_manifest.json"
       - "oracle/v408-boundaries/**"
       - "oracle/v408-executable/**"
@@ -83,6 +85,8 @@ jobs:
       REPORT_FILE: oracle/v408-executable/evidence/v408-import-mass-detection.json
       OPEN_OFFLINE_REPORT_FILE: oracle/v408-executable/evidence/open-offline-import-mass-detection.json
       DIFFERENCE_REPORT_FILE: oracle/v408-executable/evidence/v408-open-offline-differences.json
+      TOLERANCE_FILE: datasets/parity/v408_import_mass_detection_tolerances_v1.json
+      GOVERNED_DIFFERENCE_REPORT_FILE: oracle/v408-executable/evidence/v408-open-offline-governed-differences.json
 
     steps:
       - name: Check out open-offline harness
@@ -128,10 +132,11 @@ jobs:
           --lock "${ADAPTER_LOCK}"
           --output "${ADAPTER_INVENTORY}"
 
-      - name: Record adapter inventory provenance
+      - name: Record adapter and tolerance provenance
         shell: bash
         run: |
           set -euo pipefail
+          test -f "${TOLERANCE_FILE}"
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "event=${GITHUB_EVENT_NAME}"
@@ -143,6 +148,7 @@ jobs:
             sha256sum "${ADAPTER_LOCK}"
             sha256sum "${ADAPTER_CONTRACT}"
             sha256sum "${ADAPTER_INVENTORY}"
+            sha256sum "${TOLERANCE_FILE}"
           } > oracle/v408-executable/evidence/v408-adapter-inventory-provenance.txt
 
       - name: Check out exact public v4.0.8 oracle
@@ -329,7 +335,7 @@ jobs:
           print(json.dumps(summary, indent=2, sort_keys=True))
           PY
 
-      - name: Compare all normalized import and mass-detection records
+      - name: Compare all records with strict default tolerances
         shell: bash
         run: |
           set +e
@@ -345,7 +351,7 @@ jobs:
             exit "${comparison_status}"
           fi
 
-      - name: Summarize initial differential result
+      - name: Summarize strict differential result
         shell: bash
         run: |
           set -euo pipefail
@@ -367,6 +373,52 @@ jobs:
               "top_difference_fields": dict(fields.most_common(25)),
           }
           Path("oracle/v408-executable/evidence/v408-open-offline-difference-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Require equivalence under governed binary32 RT tolerance
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/compare_mzmine_stage_reports.py \
+            "${REPORT_FILE}" "${OPEN_OFFLINE_REPORT_FILE}" \
+            --tolerances "${TOLERANCE_FILE}" \
+            --output "${GOVERNED_DIFFERENCE_REPORT_FILE}" \
+            2>&1 | tee oracle/v408-executable/evidence/v408-open-offline-governed-comparison.log
+
+      - name: Summarize governed differential result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          strict_path = Path("oracle/v408-executable/evidence/v408-open-offline-differences.json")
+          governed_path = Path(
+              "oracle/v408-executable/evidence/v408-open-offline-governed-differences.json")
+          strict = json.loads(strict_path.read_text(encoding="utf-8"))
+          governed = json.loads(governed_path.read_text(encoding="utf-8"))
+          if governed["verdict"] != "equivalent-within-tolerance":
+            raise SystemExit("Governed comparison did not establish equivalence")
+          if governed["difference_count"] != 0:
+            raise SystemExit("Governed comparison retained unexpected differences")
+          summary = {
+              "strict_verdict": strict["verdict"],
+              "strict_difference_count": strict["difference_count"],
+              "strict_comparison_sha256": strict["comparison_sha256"],
+              "governed_verdict": governed["verdict"],
+              "governed_difference_count": governed["difference_count"],
+              "governed_comparison_sha256": governed["comparison_sha256"],
+              "tolerance_contract": "v408_import_mass_detection_tolerances_v1.json",
+              "tolerance_contract_sha256": hashlib.sha256(
+                  Path("datasets/parity/v408_import_mass_detection_tolerances_v1.json").read_bytes()
+              ).hexdigest(),
+          }
+          Path("oracle/v408-executable/evidence/v408-open-offline-governed-summary.json").write_text(
               json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
           print(json.dumps(summary, indent=2, sort_keys=True))
