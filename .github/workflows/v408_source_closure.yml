@@ -1,0 +1,126 @@
+name: MZmine v4.0.8 source closure
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-source-closure-*"
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_source_closure.yml"
+      - "datasets/parity/v408_source_closure_manifest.json"
+      - "scripts/audit_v408_source_closure.py"
+      - "scripts/tests/test_audit_v408_source_closure.py"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_source_closure.yml"
+      - "datasets/parity/v408_source_closure_manifest.json"
+      - "scripts/audit_v408_source_closure.py"
+      - "scripts/tests/test_audit_v408_source_closure.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-source-closure-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  audit-source-closure:
+    name: Audit public import and mass-detection source closure
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      REPORT_PATH: parity-artifacts/v408-source-closure.json
+
+    steps:
+      - name: Check out open-offline harness
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test source closure auditor
+        run: >-
+          python -m unittest
+          scripts.tests.test_audit_v408_source_closure
+          -v
+
+      - name: Check out exact public v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact oracle commit and public license
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C "${ORACLE_PATH}" rev-parse HEAD)"
+          test "${actual}" = "${ORACLE_COMMIT}"
+          test -f "${ORACLE_PATH}/LICENSE.txt"
+          test -f "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+          mkdir -p parity-artifacts
+          {
+            echo "oracle_repository=mzmine/mzmine"
+            echo "oracle_tag=v4.0.8"
+            echo "oracle_commit=${ORACLE_COMMIT}"
+            echo "actual_commit=${actual}"
+            sha256sum "${ORACLE_PATH}/LICENSE.txt"
+            sha256sum "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+          } > parity-artifacts/v408-source-closure-metadata.txt
+
+      - name: Generate fail-closed source closure report
+        run: >-
+          python scripts/audit_v408_source_closure.py
+          --checkout "${ORACLE_PATH}"
+          --manifest datasets/parity/v408_source_closure_manifest.json
+          --output "${REPORT_PATH}"
+          --require-commit
+
+      - name: Summarize source closure
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "${REPORT_PATH}" ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("parity-artifacts/v408-source-closure.json").read_text(encoding="utf-8"))
+          print(json.dumps({
+              "status": report["status"],
+              "content_sha256": report["content_sha256"],
+              **report["summary"],
+              "boundaries": [item["class"] for item in report["reviewed_boundaries_reached"]],
+              "violations": report["violations"],
+          }, indent=2, sort_keys=True))
+          PY
+          fi
+
+      - name: Upload source closure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-source-closure-${{ github.run_id }}
+          path: parity-artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Delete oracle checkout
+        if: always()
+        shell: bash
+        run: |
+          rm -rf build/oracle
+          test ! -e build/oracle
