@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +28,26 @@ from audit_v408_source_closure import (  # noqa: E402
 )
 
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+ROOT_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 class InventoryError(ValueError):
   """Raised when adapter provenance cannot be established safely."""
+
+
+@dataclass(frozen=True)
+class RootSpec:
+  root_id: str
+  path: Path
+
+
+def parse_root_spec(value: str) -> RootSpec:
+  root_id, separator, path_value = value.partition("=")
+  if separator != "=" or not ROOT_ID_RE.fullmatch(root_id) or not path_value:
+    raise argparse.ArgumentTypeError(
+        "--root must use stable-id=path with a lowercase hyphenated identifier"
+    )
+  return RootSpec(root_id, Path(path_value))
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -72,20 +89,26 @@ def source_identity(path: Path, root: Path) -> tuple[str, str, bytes]:
   return fqcn, actual_relative.as_posix(), data
 
 
-def inventory(roots: list[Path], expected_count: int | None = None) -> dict[str, Any]:
-  resolved_roots = [root.resolve() for root in roots]
+def inventory(roots: list[RootSpec], expected_count: int | None = None) -> dict[str, Any]:
+  if not roots:
+    raise InventoryError("at least one named adapter root is required")
+  root_ids = [root.root_id for root in roots]
+  if len(root_ids) != len(set(root_ids)):
+    raise InventoryError("adapter root identifiers must be unique")
+
+  resolved_roots = [RootSpec(root.root_id, root.path.resolve()) for root in roots]
   for root in resolved_roots:
-    if not root.is_dir():
-      raise InventoryError(f"missing adapter source root: {root}")
+    if not root.path.is_dir():
+      raise InventoryError(f"missing adapter source root {root.root_id}: {root.path}")
 
   by_fqcn: dict[str, dict[str, Any]] = {}
-  by_path: set[str] = set()
+  by_origin: set[str] = set()
   for root in resolved_roots:
-    for path in sorted(root.rglob("*.java")):
-      fqcn, relative, data = source_identity(path, root)
+    for path in sorted(root.path.rglob("*.java")):
+      fqcn, relative, data = source_identity(path, root.path)
       record = {
           "class": fqcn,
-          "root": root.as_posix(),
+          "root_id": root.root_id,
           "relative_path": relative,
           "byte_length": len(data),
           "sha256": sha256_bytes(data),
@@ -93,12 +116,12 @@ def inventory(roots: list[Path], expected_count: int | None = None) -> dict[str,
       existing = by_fqcn.get(fqcn)
       if existing is not None:
         raise InventoryError(
-            f"duplicate adapter class {fqcn}: {existing['root']}, {root.as_posix()}"
+            f"duplicate adapter class {fqcn}: {existing['root_id']}, {root.root_id}"
         )
-      full_key = f"{root.as_posix()}::{relative}"
-      if full_key in by_path:
-        raise InventoryError(f"duplicate adapter path: {full_key}")
-      by_path.add(full_key)
+      origin_key = f"{root.root_id}::{relative}"
+      if origin_key in by_origin:
+        raise InventoryError(f"duplicate adapter origin: {origin_key}")
+      by_origin.add(origin_key)
       by_fqcn[fqcn] = record
 
   records = [by_fqcn[key] for key in sorted(by_fqcn)]
@@ -136,6 +159,8 @@ def verify(current: dict[str, Any], locked: dict[str, Any]) -> None:
   for record in locked_records:
     if not isinstance(record, dict) or not HEX64_RE.fullmatch(str(record.get("sha256", ""))):
       raise InventoryError("locked adapter entries require lowercase SHA-256 values")
+    if not ROOT_ID_RE.fullmatch(str(record.get("root_id", ""))):
+      raise InventoryError("locked adapter entries require stable root_id values")
   locked_core = {
       "schema_version": locked["schema_version"],
       "adapter_count": locked.get("adapter_count"),
@@ -160,7 +185,7 @@ def verify(current: dict[str, Any], locked: dict[str, Any]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("--root", type=Path, action="append", required=True)
+  parser.add_argument("--root", type=parse_root_spec, action="append", required=True)
   parser.add_argument("--output", type=Path, required=True)
   parser.add_argument("--expected-count", type=int)
   parser.add_argument("--lock", type=Path)
