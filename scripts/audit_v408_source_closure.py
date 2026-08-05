@@ -5,6 +5,10 @@ This is a conservative source-level inventory, not a Java compiler. It follows e
 imports, fully qualified internal references, internal wildcard imports, and same-package top-level
 type references. Reviewed bootstrap boundaries are recorded but are not traversed. Their source is
 still inspected for direct prohibited references so the report explains why the boundary exists.
+
+The parser indexes only declarations at Java brace depth zero. Nested classes with the same simple
+name in different files therefore remain implementation details and cannot create false duplicate
+fully qualified class names.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -24,10 +28,8 @@ PACKAGE_RE = re.compile(r"\bpackage\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\
 IMPORT_RE = re.compile(
     r"\bimport\s+(static\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$*][\w$*]*)*)\s*;"
 )
-TYPE_RE = re.compile(
-    r"(?m)^\s*(?:public\s+|protected\s+|private\s+|abstract\s+|final\s+|sealed\s+|"
-    r"non-sealed\s+|static\s+|strictfp\s+)*(?:class|interface|enum|record|@interface)\s+"
-    r"([A-Za-z_$][\w$]*)\b"
+TYPE_DECL_RE = re.compile(
+    r"\b(?:class|interface|enum|record|@interface)\s+([A-Za-z_$][\w$]*)\b"
 )
 CAPITALIZED_RE = re.compile(r"\b([A-Z_$][A-Za-z0-9_$]*)\b")
 FQCN_RE = re.compile(r"\b(?:io\.github\.mzmine|io\.mzio)(?:\.[A-Za-z_$][\w$]*)+\b")
@@ -107,6 +109,7 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
   require_string_list(manifest.get("entry_points"), "entry_points")
   require_string_list(manifest.get("internal_prefixes"), "internal_prefixes")
   require_string_list(manifest.get("prohibited_prefixes"), "prohibited_prefixes")
+
   boundaries = manifest.get("reviewed_boundaries")
   if not isinstance(boundaries, dict):
     raise AuditError("reviewed_boundaries must be an object")
@@ -116,23 +119,23 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
       raise AuditError(f"reviewed boundary {name} must be an object")
     require_text(boundary.get("classification"), f"{name}.classification")
     require_text(boundary.get("reason"), f"{name}.reason")
+
   policy = manifest.get("policy")
   if not isinstance(policy, dict):
     raise AuditError("policy must be an object")
-  required_boolean_policy = (
+  for key in (
       "follow_reviewed_boundaries",
       "fail_on_missing_entry_point",
       "fail_on_unresolved_internal_import",
       "fail_on_unreviewed_prohibited_reference",
       "require_at_least_one_reviewed_boundary",
-  )
-  for key in required_boolean_policy:
+  ):
     if not isinstance(policy.get(key), bool):
       raise AuditError(f"policy.{key} must be boolean")
 
 
 def strip_comments_and_literals(text: str) -> str:
-  """Replace comments and string/character literals with spaces, preserving newlines."""
+  """Replace comments and string/character literals with spaces while preserving newlines."""
   result = list(text)
   index = 0
   state = "code"
@@ -191,16 +194,47 @@ def strip_comments_and_literals(text: str) -> str:
   return "".join(result)
 
 
+def brace_depths(code: str) -> list[int]:
+  """Return the Java brace depth immediately before every character position."""
+  depths = [0] * (len(code) + 1)
+  depth = 0
+  for index, char in enumerate(code):
+    depths[index] = depth
+    if char == "{":
+      depth += 1
+    elif char == "}":
+      if depth == 0:
+        raise AuditError("Java source contains an unmatched closing brace")
+      depth -= 1
+  depths[len(code)] = depth
+  if depth != 0:
+    raise AuditError("Java source contains unmatched opening braces")
+  return depths
+
+
+def top_level_types(code: str) -> tuple[str, ...]:
+  """Return declarations whose type keyword occurs at Java brace depth zero."""
+  depths = brace_depths(code)
+  values: list[str] = []
+  for match in TYPE_DECL_RE.finditer(code):
+    if depths[match.start()] == 0 and match.group(1) not in values:
+      values.append(match.group(1))
+  return tuple(values)
+
+
 def parse_source(path: Path, checkout: Path) -> SourceUnit:
   text = path.read_text(encoding="utf-8")
   code = strip_comments_and_literals(text)
   package_match = PACKAGE_RE.search(code)
   package = package_match.group(1) if package_match else ""
+  types = top_level_types(code)
+  if not types:
+    raise AuditError(f"Java source contains no top-level declaration: {path}")
   return SourceUnit(
       path=path,
       relative_path=path.relative_to(checkout).as_posix(),
       package=package,
-      top_level_types=tuple(dict.fromkeys(TYPE_RE.findall(code))),
+      top_level_types=types,
       text=text,
       code=code,
       sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
@@ -219,6 +253,7 @@ def build_index(checkout: Path, source_roots: Iterable[str]) -> tuple[
   packages: dict[str, list[str]] = defaultdict(list)
   roots_used: list[str] = []
   checkout_resolved = checkout.resolve()
+
   for root_value in source_roots:
     root = (checkout / root_value).resolve()
     try:
@@ -228,6 +263,7 @@ def build_index(checkout: Path, source_roots: Iterable[str]) -> tuple[
     if not root.is_dir():
       raise AuditError(f"source root is missing: {root_value}")
     roots_used.append(root_value)
+
     for path in sorted(root.rglob("*.java")):
       unit = parse_source(path, checkout)
       for type_name in unit.top_level_types:
@@ -239,6 +275,7 @@ def build_index(checkout: Path, source_roots: Iterable[str]) -> tuple[
           )
         index[fqcn] = unit
         packages[unit.package].append(fqcn)
+
   for values in packages.values():
     values.sort()
   return index, dict(packages), roots_used
@@ -313,7 +350,8 @@ def dependencies_for(
     if resolved != fqcn:
       edges.add(Edge(fqcn, resolved, relation))
 
-  for reference in FQCN_RE.findall(body_code(unit)):
+  clean_body = body_code(unit)
+  for reference in FQCN_RE.findall(clean_body):
     if not is_prefixed(reference, internal_prefixes):
       continue
     resolved = resolve_internal_type(reference, index)
@@ -322,7 +360,7 @@ def dependencies_for(
     elif resolved != fqcn:
       edges.add(Edge(fqcn, resolved, "qualified-reference"))
 
-  identifiers = set(CAPITALIZED_RE.findall(body_code(unit)))
+  identifiers = set(CAPITALIZED_RE.findall(clean_body))
   for target in packages.get(unit.package, []):
     if target == fqcn:
       continue
@@ -445,6 +483,7 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
       node["boundary_reason"] = boundaries[fqcn]["reason"]
     nodes.append(node)
 
+  unique_violations = sorted(set(violations))
   report: dict[str, Any] = {
       "schema_version": 1,
       "audit_id": manifest["audit_id"],
@@ -457,7 +496,7 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
       "source_roots": roots_used,
       "entry_points": entry_points,
       "nodes": nodes,
-      "edges": [edge.__dict__ for edge in sorted(edges)],
+      "edges": [asdict(edge) for edge in sorted(edges)],
       "reviewed_boundaries_reached": [
           {
               "class": fqcn,
@@ -466,9 +505,9 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
           }
           for fqcn in sorted(reached_boundaries)
       ],
-      "prohibited_references": [reference.__dict__ for reference in sorted(prohibited)],
-      "unresolved_internal_references": [reference.__dict__ for reference in sorted(unresolved)],
-      "internal_wildcard_imports": [reference.__dict__ for reference in sorted(wildcard_imports)],
+      "prohibited_references": [asdict(reference) for reference in sorted(prohibited)],
+      "unresolved_internal_references": [asdict(reference) for reference in sorted(unresolved)],
+      "internal_wildcard_imports": [asdict(reference) for reference in sorted(wildcard_imports)],
       "summary": {
           "indexed_top_level_types": len(index),
           "reachable_source_types": len(visited),
@@ -477,10 +516,10 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
           "prohibited_references": len(prohibited),
           "unresolved_internal_references": len(unresolved),
           "internal_wildcard_imports": len(wildcard_imports),
-          "violations": len(set(violations)),
+          "violations": len(unique_violations),
       },
-      "status": "pass" if not violations else "fail",
-      "violations": sorted(set(violations)),
+      "status": "pass" if not unique_violations else "fail",
+      "violations": unique_violations,
       "interpretation": (
           "A passing audit proves only that the configured source-level closure and reviewed "
           "boundaries are reproducible. It does not prove that the v4.0.8 oracle compiles or that "
@@ -488,7 +527,7 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
       ),
   }
   report["content_sha256"] = canonical_sha(report)
-  return report, sorted(set(violations))
+  return report, unique_violations
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -512,7 +551,7 @@ def main() -> int:
   args = build_parser().parse_args()
   try:
     report, violations = audit(args.checkout, load_json(args.manifest), args.require_commit)
-  except (AuditError, OSError) as exc:
+  except (AuditError, OSError, UnicodeError) as exc:
     print(f"Source closure audit refused: {exc}", file=sys.stderr)
     return 2
 
