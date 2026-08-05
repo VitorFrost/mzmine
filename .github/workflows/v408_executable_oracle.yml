@@ -1,0 +1,194 @@
+name: MZmine v4.0.8 executable oracle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-executable-*"
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_executable_oracle.yml"
+      - "datasets/parity/v408_source_closure_manifest.json"
+      - "oracle/v408-boundaries/**"
+      - "oracle/v408-executable/**"
+      - "scripts/audit_v408_source_closure.py"
+      - "scripts/inventory_v408_adapters.py"
+      - "scripts/prepare_v408_executable_slice.py"
+      - "scripts/tests/test_*v408*.py"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_executable_oracle.yml"
+      - "datasets/parity/v408_source_closure_manifest.json"
+      - "oracle/v408-boundaries/**"
+      - "oracle/v408-executable/**"
+      - "scripts/audit_v408_source_closure.py"
+      - "scripts/inventory_v408_adapters.py"
+      - "scripts/prepare_v408_executable_slice.py"
+      - "scripts/tests/test_*v408*.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-executable-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  compile-oracle-slice:
+    name: Compile public parser and centroid slice
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      CLOSURE_PATH: oracle/v408-executable/evidence/v408-source-closure.json
+      ADAPTER_LOCK: oracle/v408-executable/adapter-lock.json
+      ADAPTER_CONTRACT: oracle/v408-executable/adapter-contract.json
+      ADAPTER_INVENTORY: oracle/v408-executable/evidence/v408-adapter-inventory.json
+      GENERATED_SOURCE: oracle/v408-executable/generated-src/main/java
+      PREPARATION_MANIFEST: oracle/v408-executable/evidence/v408-executable-source-manifest.json
+      BOUNDARY_SOURCE: oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
+      MOUNTED_BOUNDARY_SOURCE: build/oracle/mzmine-v4.0.8/open-offline-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
+
+    steps:
+      - name: Check out open-offline harness
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Java 21 compatible Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Prepare evidence directory
+        run: mkdir -p oracle/v408-executable/evidence
+
+      - name: Run source and boundary unit tests
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover \
+            -s scripts/tests \
+            -p "test_*v408*.py" \
+            -v 2>&1 | tee oracle/v408-executable/evidence/v408-oracle-unit-tests.txt
+
+      - name: Verify exact checked-out adapter lock
+        run: >-
+          python scripts/inventory_v408_adapters.py
+          --root executable-adapters=oracle/v408-executable/adapters/src/main/java
+          --root boundary-adapters=oracle/v408-boundaries/src/main/java
+          --expected-count 12
+          --lock "${ADAPTER_LOCK}"
+          --output "${ADAPTER_INVENTORY}"
+
+      - name: Record adapter inventory provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "event=${GITHUB_EVENT_NAME}"
+            echo "source_ref=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+            echo "source_sha=${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-${GITHUB_SHA}}"
+            git rev-parse HEAD
+            sha256sum "${ADAPTER_LOCK}"
+            sha256sum "${ADAPTER_CONTRACT}"
+            sha256sum "${ADAPTER_INVENTORY}"
+          } > oracle/v408-executable/evidence/v408-adapter-inventory-provenance.txt
+
+      - name: Check out exact public v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify and mount null-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+          test -f "${ORACLE_PATH}/LICENSE.txt"
+          test -f "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+          mkdir -p "$(dirname "${MOUNTED_BOUNDARY_SOURCE}")"
+          cp "${BOUNDARY_SOURCE}" "${MOUNTED_BOUNDARY_SOURCE}"
+          cmp --silent "${BOUNDARY_SOURCE}" "${MOUNTED_BOUNDARY_SOURCE}"
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+
+      - name: Generate passing source closure
+        run: >-
+          python scripts/audit_v408_source_closure.py
+          --checkout "${ORACLE_PATH}"
+          --manifest datasets/parity/v408_source_closure_manifest.json
+          --output "${CLOSURE_PATH}"
+          --require-commit
+
+      - name: Prepare locked executable source set
+        run: >-
+          python scripts/prepare_v408_executable_slice.py
+          --checkout "${ORACLE_PATH}"
+          --closure "${CLOSURE_PATH}"
+          --adapter-lock "${ADAPTER_LOCK}"
+          --adapter-contract "${ADAPTER_CONTRACT}"
+          --output "${GENERATED_SOURCE}"
+          --manifest-output "${PREPARATION_MANIFEST}"
+
+      - name: Reject physical paths in canonical preparation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -E '(/home/runner|[A-Za-z]:\\\\|/Users/|/tmp/)' "${PREPARATION_MANIFEST}"; then
+            echo "Canonical preparation manifest contains a physical workspace path" >&2
+            exit 1
+          fi
+
+      - name: Record resolved public compile dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle -p oracle/v408-executable printCompileClasspath --no-daemon \
+            2>&1 | tee oracle/v408-executable/evidence/v408-compile-classpath.txt
+
+      - name: Compile Java 21 oracle slice
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle -p oracle/v408-executable clean compileJava --no-daemon --stacktrace \
+            2>&1 | tee oracle/v408-executable/evidence/v408-compile.log
+
+      - name: Upload executable-oracle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-executable-oracle-${{ github.run_id }}
+          path: |
+            oracle/v408-executable/evidence/
+            oracle/v408-executable/build/reports/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Delete upstream checkout and generated source
+        if: always()
+        shell: bash
+        run: |
+          rm -rf build/oracle
+          rm -rf oracle/v408-executable/generated-src
+          test ! -e build/oracle
+          test ! -e oracle/v408-executable/generated-src
