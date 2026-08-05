@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v4",
+  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v5",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -63,6 +63,16 @@
         "scanFilter",
         "processor",
         "isMassDetectActive"
+      ]
+    },
+    "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.SimpleSpectralArrays": {
+      "classification": "spectral-array-record-boundary",
+      "reason": "The oracle preserves the primitive m/z and intensity array container used by parser processing. Constructors that accept application Scan objects are excluded so the complete scan, frame, feature, project, and GUI graph is not pulled into the oracle.",
+      "preserved_members": [
+        "mzs",
+        "intensities",
+        "primitive-array constructor",
+        "data-point count"
       ]
     },
     "io.github.mzmine.datamodel.MetadataOnlyScan": {
