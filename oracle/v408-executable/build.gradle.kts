@@ -35,7 +35,15 @@ dependencies {
 tasks.withType<JavaCompile>().configureEach {
   options.encoding = "UTF-8"
   options.release.set(21)
-  options.compilerArgs.add("-Xlint:all")
+  options.compilerArgs.addAll(listOf("--enable-preview", "-Xlint:all"))
+}
+
+tasks.withType<Test>().configureEach {
+  jvmArgs("--enable-preview")
+}
+
+tasks.withType<JavaExec>().configureEach {
+  jvmArgs("--enable-preview")
 }
 
 tasks.register("printCompileClasspath") {
