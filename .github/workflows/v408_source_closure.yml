@@ -1,0 +1,148 @@
+name: MZmine v4.0.8 source closure
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-source-closure-*"
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_source_closure.yml"
+      - "datasets/parity/v408_source_closure_manifest.json"
+      - "oracle/v408-boundaries/**"
+      - "scripts/audit_v408_source_closure.py"
+      - "scripts/tests/test_*v408*.py"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_source_closure.yml"
+      - "datasets/parity/v408_source_closure_manifest.json"
+      - "oracle/v408-boundaries/**"
+      - "scripts/audit_v408_source_closure.py"
+      - "scripts/tests/test_*v408*.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-source-closure-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  audit-source-closure:
+    name: Audit public import and mass-detection source closure
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      REPORT_PATH: parity-artifacts/v408-source-closure.json
+      BOUNDARY_SOURCE: oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
+      MOUNTED_BOUNDARY_SOURCE: build/oracle/mzmine-v4.0.8/open-offline-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
+
+    steps:
+      - name: Check out open-offline harness
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare evidence directory
+        run: mkdir -p parity-artifacts
+
+      - name: Test source closure and boundary policies
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover \
+            -s scripts/tests \
+            -p "test_*v408*.py" \
+            -v 2>&1 | tee parity-artifacts/source-closure-unit-tests.txt
+
+      - name: Check out exact public v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact oracle commit and public license
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git -C "${ORACLE_PATH}" rev-parse HEAD)"
+          test "${actual}" = "${ORACLE_COMMIT}"
+          test -f "${ORACLE_PATH}/LICENSE.txt"
+          test -f "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+          test -f "${BOUNDARY_SOURCE}"
+          {
+            echo "oracle_repository=mzmine/mzmine"
+            echo "oracle_tag=v4.0.8"
+            echo "oracle_commit=${ORACLE_COMMIT}"
+            echo "actual_commit=${actual}"
+            echo "boundary_source_origin=${BOUNDARY_SOURCE}"
+            echo "boundary_policy=null-only type identity; no unavailable behavior reconstructed"
+            sha256sum "${ORACLE_PATH}/LICENSE.txt"
+            sha256sum "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+            sha256sum "${BOUNDARY_SOURCE}"
+          } > parity-artifacts/v408-source-closure-metadata.txt
+
+      - name: Mount reviewed boundary source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "${MOUNTED_BOUNDARY_SOURCE}")"
+          cp "${BOUNDARY_SOURCE}" "${MOUNTED_BOUNDARY_SOURCE}"
+          cmp --silent "${BOUNDARY_SOURCE}" "${MOUNTED_BOUNDARY_SOURCE}"
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+
+      - name: Generate fail-closed source closure report
+        run: >-
+          python scripts/audit_v408_source_closure.py
+          --checkout "${ORACLE_PATH}"
+          --manifest datasets/parity/v408_source_closure_manifest.json
+          --output "${REPORT_PATH}"
+          --require-commit
+
+      - name: Summarize source closure
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "${REPORT_PATH}" ]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("parity-artifacts/v408-source-closure.json").read_text(encoding="utf-8"))
+          print(json.dumps({
+              "status": report["status"],
+              "content_sha256": report["content_sha256"],
+              **report["summary"],
+              "boundaries": [item["class"] for item in report["reviewed_boundaries_reached"]],
+              "violations": report["violations"],
+          }, indent=2, sort_keys=True))
+          PY
+          fi
+
+      - name: Upload source closure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-source-closure-${{ github.run_id }}
+          path: parity-artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Delete oracle checkout
+        if: always()
+        shell: bash
+        run: |
+          rm -rf build/oracle
+          test ! -e build/oracle

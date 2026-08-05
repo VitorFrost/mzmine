@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v6",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "tag": "v4.0.8",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "license": "MIT"
+  },
+  "scientific_scope": {
+    "acquisition": "non-IMS LC-MS mzML",
+    "import_core": "Parse mzML into BuildingMzMLMsScan records without project or GUI integration.",
+    "mass_detection_core": "Apply the exact public CentroidMassDetector array overload with an explicit noise level.",
+    "excluded_from_oracle": [
+      "project registration and feature-list provenance",
+      "GUI dialogs and preferences",
+      "account, authentication, event, and cloud services",
+      "ion-mobility frame construction",
+      "task scheduling and application lifecycle",
+      "automatic manufacturer or source-MS-level inference"
+    ]
+  },
+  "source_roots": [
+    "mzmine-community/src/main/java",
+    "utils/src/main/java",
+    "taskcontroller/src/main/java",
+    "javafx-framework/src/main/java",
+    "open-offline-boundaries/src/main/java"
+  ],
+  "entry_points": [
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.MzMLFileImportMethod",
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.data.MzMLParser",
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.data.MzMLRawDataFile",
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.data.BuildingMzMLMsScan",
+    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector"
+  ],
+  "internal_prefixes": [
+    "io.github.mzmine."
+  ],
+  "prohibited_prefixes": [
+    "io.mzio."
+  ],
+  "reviewed_boundaries": {
+    "io.github.mzmine.taskcontrol.AbstractTask": {
+      "classification": "task-lifecycle-boundary",
+      "reason": "The oracle calls parseMzMl directly. Cancellation, scheduling, status propagation, and application task services are outside the scientific parser result and use an independently defined minimal lifecycle adapter.",
+      "preserved_members": [
+        "module call timestamp storage",
+        "cancellation flag queried by the parser"
+      ]
+    },
+    "io.github.mzmine.util.MemoryMapStorage": {
+      "classification": "null-storage-type-boundary",
+      "reason": "The public parser references a type absent from the frozen public source tree. The fork supplies a behavior-free type only so the exact public null-storage path can compile; no constructor, factory, memory-map, cleanup, or persistence behavior is reconstructed.",
+      "source_origin": "oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java",
+      "source_expected": true,
+      "preserved_members": [
+        "type identity for nullable arguments only"
+      ]
+    },
+    "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.ScanImportProcessorConfig": {
+      "classification": "import-configuration-boundary",
+      "reason": "The oracle uses an independently defined no-filter, no-advanced-processing configuration. Manufacturer inference and GUI/batch configuration are excluded while the selected source MS level remains an explicit user setting outside the parser.",
+      "preserved_members": [
+        "scanFilter",
+        "processor",
+        "isMassDetectActive"
+      ]
+    },
+    "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.SimpleSpectralArrays": {
+      "classification": "spectral-array-record-boundary",
+      "reason": "The oracle preserves the primitive m/z and intensity array container used by parser processing. Constructors that accept application Scan objects are excluded so the complete scan, frame, feature, project, and GUI graph is not pulled into the oracle.",
+      "preserved_members": [
+        "mzs",
+        "intensities",
+        "primitive-array constructor",
+        "data-point count"
+      ]
+    },
+    "io.github.mzmine.datamodel.MetadataOnlyScan": {
+      "classification": "unused-scan-interface-boundary",
+      "reason": "BuildingMzMLMsScan implements the application scan interface, but the oracle reads the public building-record getters directly. The complete RawDataFile, Frame, feature-list, visualization, and project graph is not executed.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.datamodel.RawDataFile": {
+      "classification": "unused-conversion-api-boundary",
+      "reason": "BuildingMzMLMsScan exposes conversion methods accepting RawDataFile, but the oracle normalizes BuildingMzMLMsScan values directly and never constructs or registers an application RawDataFile.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.datamodel.MobilityType": {
+      "classification": "non-ims-enum-boundary",
+      "reason": "The governed first oracle is non-IMS LC-MS. Mobility metadata may be recorded as absent, but MobilityType display formatting and its application dependencies are not executed.",
+      "preserved_members": [
+        "NONE identity only"
+      ]
+    },
+    "io.github.mzmine.datamodel.impl.DDAMsMsInfoImpl": {
+      "classification": "precursor-conversion-boundary",
+      "reason": "The parser oracle records precursor, activation, isolation-window, and charge values directly from mzML building records. It does not construct application DDAMsMsInfo objects.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.datamodel.msms.MsMsInfo": {
+      "classification": "precursor-interface-boundary",
+      "reason": "Application-level precursor object persistence is excluded; normalized precursor fields are emitted directly from public parser records.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.util.DataPointUtils": {
+      "classification": "array-helper-method-boundary",
+      "reason": "Only the array conversion helpers used by BuildingMzMLMsScan are retained. Feature conversion methods in the same utility class are unrelated and would pull the project feature model into the oracle.",
+      "preserved_members": [
+        "getDataPointsAsDoubleArray"
+      ]
+    },
+    "io.github.mzmine.datamodel.featuredata.impl.StorageUtils": {
+      "classification": "array-storage-method-boundary",
+      "reason": "Only public array/buffer conversion needed by parsed scan records is retained. Feature-series storage and memory-map lifecycle are outside the non-IMS parser oracle.",
+      "preserved_members": [
+        "storeValuesToDoubleBuffer"
+      ]
+    },
+    "io.github.mzmine.main.MZmineCore": {
+      "classification": "application-bootstrap-boundary",
+      "reason": "Scientific data enums reference MZmineCore for display formatting. The oracle records canonical enum names and does not execute application bootstrap, GUI, account, event, or cloud services.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector": {
+      "classification": "scientific-method-slice-boundary",
+      "reason": "The oracle preserves and executes the exact public primitive-array overload. Interface, GUI parameter, isotope-below-noise, and MassSpectrum overload dependencies are outside the explicit centroid noise-level comparison.",
+      "preserved_members": [
+        "getMassValues(double[], double[], double)"
+      ]
+    },
+    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters": {
+      "classification": "parameter-ui-boundary",
+      "reason": "GUI-backed parameter formatting and setup dialogs are excluded. The explicit numeric noise level is recorded in the differential settings contract.",
+      "preserved_members": []
+    }
+  },
+  "expected_prohibited_prefixes": [
+    "io.mzio."
+  ],
+  "policy": {
+    "follow_reviewed_boundaries": false,
+    "fail_on_missing_entry_point": true,
+    "fail_on_unresolved_internal_import": true,
+    "fail_on_unreviewed_prohibited_reference": true,
+    "require_at_least_one_reviewed_boundary": true,
+    "require_at_least_one_prohibited_reference_behind_boundary": false
+  }
+}
