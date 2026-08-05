@@ -28,6 +28,9 @@ on:
       - "scripts/inventory_v408_adapters.py"
       - "scripts/prepare_v408_executable_slice.py"
       - "scripts/tests/test_*v408*.py"
+      - "src/main/java/io/github/mzmine/modules/io/import_rawdata_mzml/**"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_massdetection/centroid/**"
+      - "src/test/java/io/github/mzmine/parity/**"
   pull_request:
     branches:
       - "open-offline-main"
@@ -43,6 +46,9 @@ on:
       - "scripts/inventory_v408_adapters.py"
       - "scripts/prepare_v408_executable_slice.py"
       - "scripts/tests/test_*v408*.py"
+      - "src/main/java/io/github/mzmine/modules/io/import_rawdata_mzml/**"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_massdetection/centroid/**"
+      - "src/test/java/io/github/mzmine/parity/**"
 
 permissions:
   contents: read
@@ -53,9 +59,9 @@ concurrency:
 
 jobs:
   execute-oracle-slice:
-    name: Execute public parser and centroid slice
+    name: Execute and compare public parser and centroid slice
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
@@ -75,6 +81,8 @@ jobs:
       INPUT_SHA256: 2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d
       SOURCE_MS_LEVEL: ${{ inputs.source_ms_level || '1' }}
       REPORT_FILE: oracle/v408-executable/evidence/v408-import-mass-detection.json
+      OPEN_OFFLINE_REPORT_FILE: oracle/v408-executable/evidence/open-offline-import-mass-detection.json
+      DIFFERENCE_REPORT_FILE: oracle/v408-executable/evidence/v408-open-offline-differences.json
 
     steps:
       - name: Check out open-offline harness
@@ -207,9 +215,11 @@ jobs:
           test -f "${GITHUB_WORKSPACE}/${INPUT_FILE}"
           test "$(stat -c %s "${GITHUB_WORKSPACE}/${INPUT_FILE}")" = "${INPUT_SIZE}"
           mkdir -p "$(dirname "${GITHUB_WORKSPACE}/${REPORT_FILE}")"
+          mkdir -p "$(dirname "${GITHUB_WORKSPACE}/${OPEN_OFFLINE_REPORT_FILE}")"
           {
             echo "input_physical_path=${GITHUB_WORKSPACE}/${INPUT_FILE}"
-            echo "output_physical_path=${GITHUB_WORKSPACE}/${REPORT_FILE}"
+            echo "oracle_output_physical_path=${GITHUB_WORKSPACE}/${REPORT_FILE}"
+            echo "candidate_output_physical_path=${GITHUB_WORKSPACE}/${OPEN_OFFLINE_REPORT_FILE}"
             echo "input_portable_identity=${INPUT_RELATIVE_PATH}"
           } > oracle/v408-executable/evidence/v408-execution-paths.txt
 
@@ -235,7 +245,7 @@ jobs:
             --args="--input ${GITHUB_WORKSPACE}/${INPUT_FILE} --output ${GITHUB_WORKSPACE}/${REPORT_FILE} --dataset-id ${DATASET_ID} --relative-path ${INPUT_RELATIVE_PATH} --expected-size ${INPUT_SIZE} --expected-sha256 ${INPUT_SHA256} --source-ms-level ${SOURCE_MS_LEVEL} --noise-level 0.0" \
             2>&1 | tee oracle/v408-executable/evidence/v408-execution.log
 
-      - name: Validate and summarize normalized report
+      - name: Validate and summarize normalized v4.0.8 report
         shell: bash
         run: |
           set -euo pipefail
@@ -264,7 +274,105 @@ jobs:
           print(json.dumps(summary, indent=2, sort_keys=True))
           PY
 
-      - name: Upload executable-oracle evidence
+      - name: Set up Java 20 for open-offline candidate
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Execute governed open-offline parser and centroid report
+        shell: bash
+        env:
+          OPEN_OFFLINE_DIFFERENTIAL_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
+          OPEN_OFFLINE_DIFFERENTIAL_OUTPUT: ${{ github.workspace }}/${{ env.OPEN_OFFLINE_REPORT_FILE }}
+          OPEN_OFFLINE_DIFFERENTIAL_DATASET_ID: ${{ env.DATASET_ID }}
+          OPEN_OFFLINE_DIFFERENTIAL_RELATIVE_PATH: ${{ env.INPUT_RELATIVE_PATH }}
+          OPEN_OFFLINE_DIFFERENTIAL_EXPECTED_SIZE: ${{ env.INPUT_SIZE }}
+          OPEN_OFFLINE_DIFFERENTIAL_EXPECTED_SHA256: ${{ env.INPUT_SHA256 }}
+          OPEN_OFFLINE_DIFFERENTIAL_SOURCE_MS_LEVEL: ${{ env.SOURCE_MS_LEVEL }}
+          OPEN_OFFLINE_DIFFERENTIAL_NOISE_LEVEL: "0.0"
+          OPEN_OFFLINE_DIFFERENTIAL_PRODUCER_REF: ${{ github.head_ref || github.ref_name }}
+          OPEN_OFFLINE_DIFFERENTIAL_PRODUCER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          ./gradlew test \
+            --tests io.github.mzmine.parity.OpenOfflineDifferentialReportIntegrationTest \
+            --rerun-tasks --no-daemon --stacktrace \
+            2>&1 | tee oracle/v408-executable/evidence/open-offline-execution.log
+
+      - name: Validate and summarize normalized open-offline report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          from scripts.compare_mzmine_stage_reports import load_report
+
+          report_path = Path("oracle/v408-executable/evidence/open-offline-import-mass-detection.json")
+          report = load_report(report_path)
+          summary = {
+              "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+              "producer_commit": report["producer"]["commit"],
+              "input_sha256": report["input"]["sha256"],
+              "settings_mapping_id": report["settings"]["mapping_id"],
+              "settings_sha256": report["settings"]["sha256"],
+              "import_record_count": len(report["stages"]["import"]["records"]),
+              "import_total_point_count": report["stages"]["import"]["summary"]["total_point_count"],
+              "mass_detection_record_count": len(report["stages"]["mass_detection"]["records"]),
+              "mass_detection_total_point_count": report["stages"]["mass_detection"]["summary"]["total_point_count"],
+          }
+          Path("oracle/v408-executable/evidence/open-offline-report-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Compare all normalized import and mass-detection records
+        shell: bash
+        run: |
+          set +e
+          python scripts/compare_mzmine_stage_reports.py \
+            "${REPORT_FILE}" "${OPEN_OFFLINE_REPORT_FILE}" \
+            --output "${DIFFERENCE_REPORT_FILE}" \
+            2>&1 | tee oracle/v408-executable/evidence/v408-open-offline-comparison.log
+          comparison_status=${PIPESTATUS[0]}
+          set -e
+          echo "${comparison_status}" > oracle/v408-executable/evidence/v408-open-offline-comparison-exit-code.txt
+          test -f "${DIFFERENCE_REPORT_FILE}"
+          if [ "${comparison_status}" -gt 1 ]; then
+            exit "${comparison_status}"
+          fi
+
+      - name: Summarize initial differential result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          path = Path("oracle/v408-executable/evidence/v408-open-offline-differences.json")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          kinds = Counter(item["kind"] for item in report["differences"])
+          fields = Counter(f"{item['stage']}:{item['field']}" for item in report["differences"])
+          summary = {
+              "verdict": report["verdict"],
+              "difference_count": report["difference_count"],
+              "comparison_sha256": report["comparison_sha256"],
+              "stage_record_counts": report["stage_record_counts"],
+              "difference_kinds": dict(sorted(kinds.items())),
+              "top_difference_fields": dict(fields.most_common(25)),
+          }
+          Path("oracle/v408-executable/evidence/v408-open-offline-difference-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload executable-oracle and differential evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -273,6 +381,8 @@ jobs:
             oracle/v408-executable/evidence/
             oracle/v408-executable/build/reports/
             oracle/v408-executable/build/test-results/
+            build/reports/tests/test/
+            build/test-results/test/
           if-no-files-found: error
           retention-days: 30
 
