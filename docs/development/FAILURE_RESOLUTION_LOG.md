@@ -23,6 +23,8 @@ Compilation is not scientific equivalence.
 | F-007 | validated | Portable `root_id` inventory hash `1f3fa33550bfd1742c1af0b809ebb700794979553489d6278731f43cfdfb2e43` passed in run `31019779360`. |
 | F-008 | validated | Portable preparation manifest hash `b1cbac55fbe28a32dda9fea0043bb9b97879b2cb0bece89ca12a0ddc494df23a` contained no physical workspace paths and compiled in run `31019779360`. |
 | F-009 | validated | Corrected closure hash `6662c196b9487154cf7efb4aafb1574c42a6c90a554c8805c6585b5787a0ffd6` was strictly bound to the adapter contract and passed preparation/compilation in run `31019779360`. |
+| F-010 | validated | `oracle/v408-executable/README.md` was created with the correct new-file operation in commit `47bfad1708ea5324e3d9e308252fe9ed71b66bd6`. |
+| F-011 | validated | A fresh blob SHA was fetched and F-010 was closed successfully in commit `2c0be3f54a121eefd416227e92cd42c332b20a16`. |
 
 ---
 
@@ -149,6 +151,24 @@ Compilation is not scientific equivalence.
 - **Decision:** validated.
 - **Lesson retained:** correcting semantic boundary metadata intentionally invalidates downstream
   contracts even when the source graph is unchanged.
+
+## Resolution R-010 — F-010
+
+- **Implemented:** the absent path `oracle/v408-executable/README.md` was written with
+  `GitHub.create_file`, not `update_file`.
+- **Validated by:** successful commit `47bfad1708ea5324e3d9e308252fe9ed71b66bd6` and subsequent path
+  existence.
+- **Result:** the README documents scope, frozen hashes, preparation rules, adapter behavior,
+  compilation evidence, and failure-first history without changing source or scientific settings.
+- **Decision:** validated.
+
+## Resolution R-011 — F-011
+
+- **Implemented:** the current F-010 blob SHA was fetched immediately before update.
+- **Validated by:** commit `2c0be3f54a121eefd416227e92cd42c332b20a16` successfully closed F-010
+  while preserving its original observation, proposal, and criteria.
+- **Decision:** validated.
+- **Lesson retained:** existing-file updates on an active branch require a fresh blob SHA.
 
 ## Next unresolved gate
 
