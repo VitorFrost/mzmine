@@ -1,6 +1,6 @@
 # F-010 — New README was sent to the GitHub update operation
 
-- **Status:** proposal-ready
+- **Status:** validated
 - **First observed:** 2026-08-05 12:29 BRT
 - **Scope:** repository documentation write for the executable oracle
 - **Input revision:** `aa27181e187e1cee9c8e93ac810914b2e39b4f0c`
@@ -14,7 +14,7 @@
 - **Root-cause hypothesis:** the operation was selected from the intended content change rather than
   from the current existence state of the path. Confidence: high.
 - **Scientific/provenance risk:** none. This is a fail-closed documentation-write error.
-- **Proposed correction — revision 1 (not implemented):**
+- **Proposed correction — revision 1 (recorded before implementation):**
   1. Confirm the target path is new.
   2. Use `GitHub.create_file` with the same reviewed content and branch.
   3. For future writes, fetch an existing path before `update_file`; use `create_file` only when the
@@ -26,7 +26,10 @@
   - no source, lock, adapter, workflow, or scientific setting changes in the documentation commit;
   - subsequent CI remains green;
   - any further failure is registered before correction.
-- **Implemented change:** not implemented.
-- **Validation result:** not run.
-- **Decision and lessons:** file existence must determine the connector operation before preparing a
-  write payload.
+- **Implemented change:** commit `47bfad1708ea5324e3d9e308252fe9ed71b66bd6` created the new README
+  with `GitHub.create_file`. No source, adapter, lock, contract, workflow, or scientific setting was
+  modified by that commit.
+- **Validation result:** file creation succeeded and the repository path exists. Final CI status is
+  tracked on the branch head and must remain green before PR integration.
+- **Decision and lessons:** correction validated at the file-operation gate. File existence must
+  determine the connector operation before preparing a write payload.
