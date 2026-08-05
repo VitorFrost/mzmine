@@ -60,6 +60,47 @@ class InventoryV408AdaptersTest(unittest.TestCase):
     self.assertEqual(64, len(first["content_sha256"]))
     self.assertTrue(all(len(item["sha256"]) == 64 for item in first["adapters"]))
 
+  def test_javadoc_keywords_do_not_replace_real_type(self) -> None:
+    self._write(
+        "io/github/mzmine/example/Alpha.java",
+        """package io.github.mzmine.example;
+/** This class and interface record enum wording is documentation only. */
+public final class Alpha {
+  private static class NestedBeforeEnd { }
+  String text = "class FalseType";
+}
+""",
+    )
+    result = INVENTORY.inventory([self.root], expected_count=2)
+    self.assertIn(
+        "io.github.mzmine.example.Alpha",
+        {item["class"] for item in result["adapters"]},
+    )
+    self.assertNotIn(
+        "io.github.mzmine.example.and",
+        {item["class"] for item in result["adapters"]},
+    )
+
+  def test_nested_type_is_not_counted_as_second_top_level_type(self) -> None:
+    self._write(
+        "io/github/mzmine/example/Beta.java",
+        """package io.github.mzmine.example;
+public interface Beta {
+  final class Nested { }
+}
+""",
+    )
+    result = INVENTORY.inventory([self.root], expected_count=2)
+    self.assertEqual(2, result["adapter_count"])
+
+  def test_no_active_top_level_type_is_rejected(self) -> None:
+    self._write(
+        "io/github/mzmine/example/Empty.java",
+        "package io.github.mzmine.example;\n// public class Empty {}\n",
+    )
+    with self.assertRaisesRegex(INVENTORY.InventoryError, "exactly one active top-level"):
+      INVENTORY.inventory([self.root])
+
   def test_path_and_package_mismatch_is_rejected(self) -> None:
     self._write(
         "io/github/mzmine/example/Wrong.java",
