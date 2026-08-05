@@ -44,6 +44,8 @@ jobs:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
       CLOSURE_PATH: oracle/v408-executable/evidence/v408-source-closure.json
+      ADAPTER_LOCK: oracle/v408-executable/adapter-lock.json
+      ADAPTER_CONTRACT: oracle/v408-executable/adapter-contract.json
       ADAPTER_INVENTORY: oracle/v408-executable/evidence/v408-adapter-inventory.json
       GENERATED_SOURCE: oracle/v408-executable/generated-src/main/java
       PREPARATION_MANIFEST: oracle/v408-executable/evidence/v408-executable-source-manifest.json
@@ -85,12 +87,13 @@ jobs:
             -p "test_*v408*.py" \
             -v 2>&1 | tee oracle/v408-executable/evidence/v408-oracle-unit-tests.txt
 
-      - name: Record exact checked-out adapter hashes
+      - name: Verify exact checked-out adapter lock
         run: >-
           python scripts/inventory_v408_adapters.py
           --root executable-adapters=oracle/v408-executable/adapters/src/main/java
           --root boundary-adapters=oracle/v408-boundaries/src/main/java
           --expected-count 12
+          --lock "${ADAPTER_LOCK}"
           --output "${ADAPTER_INVENTORY}"
 
       - name: Record adapter inventory provenance
@@ -103,6 +106,8 @@ jobs:
             echo "source_ref=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
             echo "source_sha=${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-${GITHUB_SHA}}"
             git rev-parse HEAD
+            sha256sum "${ADAPTER_LOCK}"
+            sha256sum "${ADAPTER_CONTRACT}"
             sha256sum "${ADAPTER_INVENTORY}"
           } > oracle/v408-executable/evidence/v408-adapter-inventory-provenance.txt
 
@@ -135,13 +140,24 @@ jobs:
           --output "${CLOSURE_PATH}"
           --require-commit
 
-      - name: Prepare verified executable source set
+      - name: Prepare locked executable source set
         run: >-
           python scripts/prepare_v408_executable_slice.py
           --checkout "${ORACLE_PATH}"
           --closure "${CLOSURE_PATH}"
+          --adapter-lock "${ADAPTER_LOCK}"
+          --adapter-contract "${ADAPTER_CONTRACT}"
           --output "${GENERATED_SOURCE}"
           --manifest-output "${PREPARATION_MANIFEST}"
+
+      - name: Reject physical paths in canonical preparation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -E '(/home/runner|[A-Za-z]:\\\\|/Users/|/tmp/)' "${PREPARATION_MANIFEST}"; then
+            echo "Canonical preparation manifest contains a physical workspace path" >&2
+            exit 1
+          fi
 
       - name: Record resolved public compile dependencies
         shell: bash
