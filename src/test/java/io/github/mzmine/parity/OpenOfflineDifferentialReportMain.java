@@ -268,23 +268,20 @@ public final class OpenOfflineDifferentialReportMain {
     return scan.getSpectrumType() == null ? "UNKNOWN" : scan.getSpectrumType().name();
   }
 
-  private static SpectralArrays arrays(MsScan scan) {
+  static SpectralArrays arrays(MsScan scan) {
     int count = scan.getNumberOfDataPoints();
-    double[] mzs = scan.getMzValues(new double[count]);
-    float[] sourceIntensities = scan.getIntensityValues(new float[count]);
-    if (mzs.length < count || sourceIntensities.length < count) {
+    double[] decodedMzs = scan.getMzValues(null);
+    float[] decodedIntensities = scan.getIntensityValues(null);
+    if (decodedMzs.length < count || decodedIntensities.length < count) {
       throw new IllegalStateException("Parser returned arrays shorter than point count for scan "
           + scan.getScanNumber());
     }
+
+    double[] mzs = new double[count];
     double[] intensities = new double[count];
-    System.arraycopy(mzs, 0, mzs, 0, count);
+    System.arraycopy(decodedMzs, 0, mzs, 0, count);
     for (int index = 0; index < count; index++) {
-      intensities[index] = sourceIntensities[index];
-    }
-    if (mzs.length != count) {
-      double[] exactMzs = new double[count];
-      System.arraycopy(mzs, 0, exactMzs, 0, count);
-      mzs = exactMzs;
+      intensities[index] = decodedIntensities[index];
     }
     return new SpectralArrays(mzs, intensities);
   }
@@ -389,7 +386,7 @@ public final class OpenOfflineDifferentialReportMain {
     return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
   }
 
-  private record SpectralArrays(double[] mzs, double[] intensities) {
+  record SpectralArrays(double[] mzs, double[] intensities) {
     SpectralArrays {
       if (mzs.length != intensities.length) {
         throw new IllegalArgumentException("m/z and intensity arrays must have equal length");
