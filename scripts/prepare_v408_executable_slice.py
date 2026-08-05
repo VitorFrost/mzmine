@@ -3,7 +3,7 @@
 
 Every upstream source is selected from the passing closure report and verified against its recorded
 SHA-256. Reviewed boundary classes are replaced only when a versioned adapter with the identical
-fully qualified class name exists under ``oracle/v408-executable/adapters/src/main/java``.
+fully qualified class name exists under one of the declared adapter source roots.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
 class PreparationError(ValueError):
@@ -43,10 +43,36 @@ def fqcn_path(fqcn: str) -> Path:
   return Path(*fqcn.split(".")).with_suffix(".java")
 
 
+def find_adapter(fqcn: str, adapter_roots: Iterable[Path]) -> Path | None:
+  relative = fqcn_path(fqcn)
+  matches = [root / relative for root in adapter_roots if (root / relative).is_file()]
+  if len(matches) > 1:
+    digests = {sha256(path) for path in matches}
+    if len(digests) > 1:
+      raise PreparationError(
+          f"conflicting adapters for {fqcn}: {', '.join(map(str, matches))}"
+      )
+  return matches[0] if matches else None
+
+
+def strip_source_prefix(relative: str) -> str:
+  prefixes = (
+      "mzmine-community/src/main/java/",
+      "utils/src/main/java/",
+      "taskcontroller/src/main/java/",
+      "javafx-framework/src/main/java/",
+      "open-offline-boundaries/src/main/java/",
+  )
+  for prefix in prefixes:
+    if relative.startswith(prefix):
+      return relative[len(prefix):]
+  raise PreparationError(f"closure path is outside approved source roots: {relative}")
+
+
 def prepare(
     checkout: Path,
     closure: dict[str, Any],
-    adapters: Path,
+    adapter_roots: list[Path],
     output: Path,
 ) -> dict[str, Any]:
   if closure.get("status") != "pass":
@@ -58,12 +84,13 @@ def prepare(
     raise PreparationError("source closure does not target the frozen v4.0.8 commit")
 
   checkout = checkout.resolve()
-  adapters = adapters.resolve()
   output = output.resolve()
+  adapter_roots = [root.resolve() for root in adapter_roots]
   if not checkout.is_dir():
     raise PreparationError(f"missing upstream checkout: {checkout}")
-  if not adapters.is_dir():
-    raise PreparationError(f"missing adapter source root: {adapters}")
+  for root in adapter_roots:
+    if not root.is_dir():
+      raise PreparationError(f"missing adapter source root: {root}")
 
   if output.exists():
     shutil.rmtree(output)
@@ -85,21 +112,14 @@ def prepare(
     )):
       raise PreparationError(f"invalid closure node: {node}")
 
-    adapter = adapters / fqcn_path(fqcn)
-    uses_adapter = adapter.is_file()
-    if uses_adapter:
+    adapter = find_adapter(fqcn, adapter_roots)
+    if adapter is not None:
       source = adapter
       destination = output / fqcn_path(fqcn)
       origin = "open-offline-adapter"
     else:
       source = checkout / relative
-      destination = output / relative.removeprefix(
-          "mzmine-community/src/main/java/"
-      ).removeprefix("utils/src/main/java/").removeprefix(
-          "taskcontroller/src/main/java/"
-      ).removeprefix("javafx-framework/src/main/java/").removeprefix(
-          "open-offline-boundaries/src/main/java/"
-      )
+      destination = output / strip_source_prefix(relative)
       origin = "upstream-v4.0.8"
       if not source.is_file():
         raise PreparationError(f"missing closure source for {fqcn}: {source}")
@@ -143,6 +163,7 @@ def prepare(
       "adapter_class_count": sum(
           1 for record in class_records if record["origin"] == "open-offline-adapter"
       ),
+      "adapter_roots": [root.as_posix() for root in adapter_roots],
       "classes": class_records,
       "source_files": sorted(copied_paths.values(), key=lambda item: item["path"]),
   }
@@ -157,9 +178,11 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("--checkout", type=Path, required=True)
   parser.add_argument("--closure", type=Path, required=True)
   parser.add_argument(
-      "--adapters",
+      "--adapter-root",
+      action="append",
       type=Path,
-      default=Path("oracle/v408-executable/adapters/src/main/java"),
+      default=None,
+      help="Reviewed Java adapter source root. May be repeated.",
   )
   parser.add_argument("--output", type=Path, required=True)
   parser.add_argument("--manifest-output", type=Path, required=True)
@@ -168,11 +191,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
   args = build_parser().parse_args()
+  adapter_roots = args.adapter_root or [
+      Path("oracle/v408-executable/adapters/src/main/java"),
+      Path("oracle/v408-boundaries/src/main/java"),
+  ]
   try:
     manifest = prepare(
         args.checkout,
         load_json(args.closure),
-        args.adapters,
+        adapter_roots,
         args.output,
     )
   except (PreparationError, OSError) as exc:
