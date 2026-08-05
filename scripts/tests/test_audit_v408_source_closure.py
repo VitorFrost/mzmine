@@ -125,6 +125,47 @@ class SourceClosureAuditTest(unittest.TestCase):
         report["prohibited_references"][0]["reference"],
     )
 
+  def test_duplicate_nested_names_are_not_indexed_as_top_level_types(self) -> None:
+    self._write(
+        "io/github/mzmine/dep/Dep.java",
+        """
+        package io.github.mzmine.dep;
+        public class Dep {
+          static class DataPointIterator { }
+          Helper helper;
+        }
+        """,
+    )
+    self._write(
+        "io/github/mzmine/dep/Helper.java",
+        """
+        package io.github.mzmine.dep;
+        public class Helper {
+          private class DataPointIterator { }
+        }
+        """,
+    )
+    index, _, _ = AUDITOR.build_index(self.checkout, ["src/main/java"])
+    self.assertIn("io.github.mzmine.dep.Dep", index)
+    self.assertIn("io.github.mzmine.dep.Helper", index)
+    self.assertNotIn("io.github.mzmine.dep.DataPointIterator", index)
+    report, violations = AUDITOR.audit(self.checkout, self.manifest(), False)
+    self.assertEqual([], violations)
+    self.assertEqual("pass", report["status"])
+
+  def test_multiple_real_top_level_types_are_indexed(self) -> None:
+    self._write(
+        "io/github/mzmine/dep/Dep.java",
+        """
+        package io.github.mzmine.dep;
+        public class Dep { Helper helper; }
+        final class PackageHelper { }
+        """,
+    )
+    index, _, _ = AUDITOR.build_index(self.checkout, ["src/main/java"])
+    self.assertIn("io.github.mzmine.dep.Dep", index)
+    self.assertIn("io.github.mzmine.dep.PackageHelper", index)
+
   def test_unreviewed_prohibited_reference_fails(self) -> None:
     self._write(
         "io/github/mzmine/Root.java",
