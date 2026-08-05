@@ -1,11 +1,24 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-import-mass-detection-source-closure-v1",
+  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v2",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
     "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
     "license": "MIT"
+  },
+  "scientific_scope": {
+    "acquisition": "non-IMS LC-MS mzML",
+    "import_core": "Parse mzML into BuildingMzMLMsScan records without project or GUI integration.",
+    "mass_detection_core": "Apply the exact public CentroidMassDetector array overload with an explicit noise level.",
+    "excluded_from_oracle": [
+      "project registration and feature-list provenance",
+      "GUI dialogs and preferences",
+      "account, authentication, event, and cloud services",
+      "ion-mobility frame construction",
+      "task scheduling and application lifecycle",
+      "automatic manufacturer or source-MS-level inference"
+    ]
   },
   "source_roots": [
     "mzmine-community/src/main/java",
@@ -14,11 +27,11 @@
     "javafx-framework/src/main/java"
   ],
   "entry_points": [
-    "io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportTask",
-    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule",
-    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionParameters",
-    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector",
-    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters"
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.MzMLFileImportMethod",
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.data.MzMLParser",
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.data.MzMLRawDataFile",
+    "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.data.BuildingMzMLMsScan",
+    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector"
   ],
   "internal_prefixes": [
     "io.github.mzmine."
@@ -27,9 +40,13 @@
     "io.mzio."
   ],
   "reviewed_boundaries": {
-    "io.github.mzmine.main.MZmineCore": {
-      "classification": "bootstrap-boundary",
-      "reason": "The full application bootstrap reaches proprietary account, memory, event, and task services. The scientific oracle must use an independently defined minimal bootstrap instead of executing the full class."
+    "io.github.mzmine.taskcontrol.AbstractTask": {
+      "classification": "task-lifecycle-boundary",
+      "reason": "The oracle calls parseMzMl directly. Cancellation, scheduling, status propagation, and application task services are outside the scientific parser result and use an independently defined minimal lifecycle adapter."
+    },
+    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters": {
+      "classification": "parameter-ui-boundary",
+      "reason": "The oracle calls the exact public getMassValues(mzs, intensities, noiseLevel) overload. GUI-backed parameter formatting and setup dialogs are excluded; the explicit numeric noise level is recorded in the differential settings contract."
     }
   },
   "expected_prohibited_prefixes": [
