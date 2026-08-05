@@ -110,19 +110,19 @@ class GenerateMZmineStageReportTest(unittest.TestCase):
       self.assertIn("--no-daemon", command)
       self.assertIn("--rerun-tasks", command)
 
-  def test_survey_ms_level_has_distinct_governed_mapping(self) -> None:
+  def test_source_ms_level_has_distinct_governed_mapping(self) -> None:
     self.assertEqual(
-        "mzml-import-centroid-survey-ms1-v1",
+        "mzml-import-centroid-source-ms1-v1",
         GENERATOR.settings_mapping_id(1),
     )
     self.assertEqual(
-        "mzml-import-centroid-survey-ms2-v1",
+        "mzml-import-centroid-source-ms2-v1",
         GENERATOR.settings_mapping_id(2),
     )
     with self.assertRaisesRegex(GENERATOR.GenerationError, "exactly 1 or 2"):
       GENERATOR.settings_mapping_id(3)
 
-  def test_environment_passes_single_selected_survey_level(self) -> None:
+  def test_environment_passes_single_manual_source_level(self) -> None:
     with tempfile.TemporaryDirectory() as directory:
       root = Path(directory)
       args = argparse.Namespace(
@@ -133,15 +133,32 @@ class GenerateMZmineStageReportTest(unittest.TestCase):
           producer_commit="a" * 40,
           application_version="3.9.1",
           threads=1,
-          survey_ms_level=2,
+          source_ms_level=2,
       )
       dataset = {
           "dataset_id": "dataset",
           "relative_path": "dataset/input.mzML",
       }
       environment = GENERATOR.build_environment(args, dataset, "b" * 64)
-      self.assertEqual("2", environment["MZMINE_PARITY_SURVEY_MS_LEVEL"])
+      self.assertEqual("2", environment["MZMINE_PARITY_SOURCE_MS_LEVEL"])
+      self.assertNotIn("MZMINE_PARITY_SURVEY_MS_LEVEL", environment)
       self.assertEqual("1", environment["MZMINE_PARITY_THREADS"])
+
+  def test_new_and_legacy_cli_names_resolve_to_same_selection(self) -> None:
+    common = [
+        "--input", "input.mzML",
+        "--output", "report.json",
+        "--producer-ref", "agent/test",
+        "--producer-commit", "a" * 40,
+    ]
+    new_args = GENERATOR.build_parser().parse_args(
+        common + ["--source-ms-level", "2"]
+    )
+    legacy_args = GENERATOR.build_parser().parse_args(
+        common + ["--survey-ms-level", "2"]
+    )
+    self.assertEqual(2, new_args.source_ms_level)
+    self.assertEqual(new_args.source_ms_level, legacy_args.source_ms_level)
 
 
 if __name__ == "__main__":

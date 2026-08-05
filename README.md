@@ -51,6 +51,8 @@ See:
 - [`OPEN_OFFLINE_FORK.md`](OPEN_OFFLINE_FORK.md) — project charter and scope;
 - [`docs/public_validation/MZMINE_4_PARITY.md`](docs/public_validation/MZMINE_4_PARITY.md) — current
   parity matrix;
+- [`docs/public_validation/SOURCE_MS_LEVEL_SELECTION.md`](docs/public_validation/SOURCE_MS_LEVEL_SELECTION.md)
+  — manual MS1/MS2 source-data selection and its scientific boundary;
 - [`docs/milestones/MILESTONE_4_0_CORE_PARITY.md`](docs/milestones/MILESTONE_4_0_CORE_PARITY.md) —
   active implementation sequence;
 - [`docs/public_validation/DATASETS.md`](docs/public_validation/DATASETS.md) — governed public corpus.
@@ -102,6 +104,21 @@ python -m unittest discover -s scripts/tests -p "test_*.py" -v
 python scripts/smoke_test_headless.py
 python scripts/test_headless_batch.py
 ```
+
+For a governed differential stage report, the user explicitly selects the original mzML level used
+as the source-data stream:
+
+```bash
+python scripts/generate_mzmine_stage_report.py \
+  --input data/file.mzML \
+  --output parity-artifacts/report.json \
+  --producer-ref open-offline-main \
+  --producer-commit <40-character-commit-sha> \
+  --source-ms-level 1
+```
+
+Use `--source-ms-level 2` to select MS2. This option filters the source stream for processing; it
+does not infer the instrument configuration or relabel scans.
 
 The complete CI additionally compares the frozen scientific baseline with an untouched mzmine 3.9.0
 checkout and runs governed public-corpus workflows when requested by their dedicated actions.
