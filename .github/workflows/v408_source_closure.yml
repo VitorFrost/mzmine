@@ -11,7 +11,7 @@ on:
       - "datasets/parity/v408_source_closure_manifest.json"
       - "oracle/v408-boundaries/**"
       - "scripts/audit_v408_source_closure.py"
-      - "scripts/tests/test_audit_v408*.py"
+      - "scripts/tests/test_*v408*.py"
   pull_request:
     branches:
       - "open-offline-main"
@@ -20,7 +20,7 @@ on:
       - "datasets/parity/v408_source_closure_manifest.json"
       - "oracle/v408-boundaries/**"
       - "scripts/audit_v408_source_closure.py"
-      - "scripts/tests/test_audit_v408*.py"
+      - "scripts/tests/test_*v408*.py"
 
 permissions:
   contents: read
@@ -56,13 +56,13 @@ jobs:
       - name: Prepare evidence directory
         run: mkdir -p parity-artifacts
 
-      - name: Test source closure auditor
+      - name: Test source closure and boundary policies
         shell: bash
         run: |
           set -o pipefail
           python -m unittest discover \
             -s scripts/tests \
-            -p "test_audit_v408*.py" \
+            -p "test_*v408*.py" \
             -v 2>&1 | tee parity-artifacts/source-closure-unit-tests.txt
 
       - name: Check out exact public v4.0.8 oracle
