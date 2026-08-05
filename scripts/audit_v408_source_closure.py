@@ -5,9 +5,6 @@ This is a conservative source-level inventory, not a Java compiler. It follows e
 imports, fully qualified internal references, internal wildcard imports, and same-package top-level
 type references. Reviewed bootstrap boundaries are recorded but are not traversed. Their source is
 still inspected for direct prohibited references so the report explains why the boundary exists.
-
-The command is fail-closed for missing entry points, unresolved explicit internal imports, unexpected
-prohibited references, and a checkout whose Git commit differs from the frozen oracle commit.
 """
 
 from __future__ import annotations
@@ -87,9 +84,7 @@ def require_text(value: Any, field: str) -> str:
 def require_string_list(value: Any, field: str) -> list[str]:
   if not isinstance(value, list) or not value:
     raise AuditError(f"{field} must be a non-empty array")
-  result: list[str] = []
-  for index, item in enumerate(value):
-    result.append(require_text(item, f"{field}[{index}]") )
+  result = [require_text(item, f"{field}[{index}]") for index, item in enumerate(value)]
   if len(result) != len(set(result)):
     raise AuditError(f"{field} must not contain duplicates")
   return result
@@ -124,55 +119,51 @@ def validate_manifest(manifest: dict[str, Any]) -> None:
   policy = manifest.get("policy")
   if not isinstance(policy, dict):
     raise AuditError("policy must be an object")
-  for key in (
+  required_boolean_policy = (
       "follow_reviewed_boundaries",
       "fail_on_missing_entry_point",
       "fail_on_unresolved_internal_import",
       "fail_on_unreviewed_prohibited_reference",
       "require_at_least_one_reviewed_boundary",
-  ):
+  )
+  for key in required_boolean_policy:
     if not isinstance(policy.get(key), bool):
       raise AuditError(f"policy.{key} must be boolean")
 
 
 def strip_comments_and_literals(text: str) -> str:
-  """Replace comments and string/character literals with spaces while preserving newlines."""
+  """Replace comments and string/character literals with spaces, preserving newlines."""
   result = list(text)
   index = 0
-  length = len(text)
   state = "code"
   quote = ""
-  while index < length:
+  while index < len(text):
     char = text[index]
-    next_char = text[index + 1] if index + 1 < length else ""
+    following = text[index + 1] if index + 1 < len(text) else ""
     if state == "code":
-      if char == "/" and next_char == "/":
+      if char == "/" and following == "/":
         result[index] = result[index + 1] = " "
         index += 2
-        state = "line_comment"
-        continue
-      if char == "/" and next_char == "*":
+        state = "line-comment"
+      elif char == "/" and following == "*":
         result[index] = result[index + 1] = " "
         index += 2
-        state = "block_comment"
-        continue
-      if char in ('"', "'"):
+        state = "block-comment"
+      elif char in ('"', "'"):
         quote = char
         result[index] = " "
         index += 1
         state = "literal"
-        continue
-      index += 1
-      continue
-    if state == "line_comment":
+      else:
+        index += 1
+    elif state == "line-comment":
       if char == "\n":
         state = "code"
       else:
         result[index] = " "
       index += 1
-      continue
-    if state == "block_comment":
-      if char == "*" and next_char == "/":
+    elif state == "block-comment":
+      if char == "*" and following == "/":
         result[index] = result[index + 1] = " "
         index += 2
         state = "code"
@@ -180,18 +171,16 @@ def strip_comments_and_literals(text: str) -> str:
         if char != "\n":
           result[index] = " "
         index += 1
-      continue
-    if state == "literal":
+    else:
       if char == "\\":
         result[index] = " "
-        if index + 1 < length:
+        if index + 1 < len(text):
           if text[index + 1] != "\n":
             result[index + 1] = " "
           index += 2
         else:
           index += 1
-        continue
-      if char == quote:
+      elif char == quote:
         result[index] = " "
         index += 1
         state = "code"
@@ -207,16 +196,20 @@ def parse_source(path: Path, checkout: Path) -> SourceUnit:
   code = strip_comments_and_literals(text)
   package_match = PACKAGE_RE.search(code)
   package = package_match.group(1) if package_match else ""
-  types = tuple(dict.fromkeys(TYPE_RE.findall(code)))
   return SourceUnit(
       path=path,
       relative_path=path.relative_to(checkout).as_posix(),
       package=package,
-      top_level_types=types,
+      top_level_types=tuple(dict.fromkeys(TYPE_RE.findall(code))),
       text=text,
       code=code,
       sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
   )
+
+
+def body_code(unit: SourceUnit) -> str:
+  """Return code without package/import declarations for qualified-reference scanning."""
+  return IMPORT_RE.sub("", PACKAGE_RE.sub("", unit.code))
 
 
 def build_index(checkout: Path, source_roots: Iterable[str]) -> tuple[
@@ -225,10 +218,11 @@ def build_index(checkout: Path, source_roots: Iterable[str]) -> tuple[
   index: dict[str, SourceUnit] = {}
   packages: dict[str, list[str]] = defaultdict(list)
   roots_used: list[str] = []
+  checkout_resolved = checkout.resolve()
   for root_value in source_roots:
     root = (checkout / root_value).resolve()
     try:
-      root.relative_to(checkout.resolve())
+      root.relative_to(checkout_resolved)
     except ValueError as exc:
       raise AuditError(f"source root escapes checkout: {root_value}") from exc
     if not root.is_dir():
@@ -276,7 +270,7 @@ def direct_prohibited_references(
   for is_static, imported in imports_for(unit):
     if is_prefixed(imported, prohibited_prefixes):
       references.add(Reference(fqcn, imported, "static-import" if is_static else "import"))
-  for reference in FQCN_RE.findall(unit.code):
+  for reference in FQCN_RE.findall(body_code(unit)):
     if is_prefixed(reference, prohibited_prefixes):
       references.add(Reference(fqcn, reference, "qualified-reference"))
   return references
@@ -310,7 +304,7 @@ def dependencies_for(
       continue
 
     resolved = resolve_internal_type(imported, index)
-    if resolved is None and is_static:
+    if resolved is None and is_static and "." in imported:
       resolved = resolve_internal_type(imported.rsplit(".", 1)[0], index)
     if resolved is None:
       unresolved.add(Reference(fqcn, imported, f"unresolved-{relation}"))
@@ -319,7 +313,7 @@ def dependencies_for(
     if resolved != fqcn:
       edges.add(Edge(fqcn, resolved, relation))
 
-  for reference in FQCN_RE.findall(unit.code):
+  for reference in FQCN_RE.findall(body_code(unit)):
     if not is_prefixed(reference, internal_prefixes):
       continue
     resolved = resolve_internal_type(reference, index)
@@ -328,15 +322,13 @@ def dependencies_for(
     elif resolved != fqcn:
       edges.add(Edge(fqcn, resolved, "qualified-reference"))
 
-  package_types = packages.get(unit.package, [])
-  if package_types:
-    identifiers = set(CAPITALIZED_RE.findall(unit.code))
-    for target in package_types:
-      if target == fqcn:
-        continue
-      simple_name = target.rsplit(".", 1)[-1]
-      if simple_name in identifiers and simple_name not in explicit_simple_names:
-        edges.add(Edge(fqcn, target, "same-package-reference"))
+  identifiers = set(CAPITALIZED_RE.findall(body_code(unit)))
+  for target in packages.get(unit.package, []):
+    if target == fqcn:
+      continue
+    simple_name = target.rsplit(".", 1)[-1]
+    if simple_name in identifiers and simple_name not in explicit_simple_names:
+      edges.add(Edge(fqcn, target, "same-package-reference"))
 
   return edges, unresolved, wildcard_imports
 
@@ -349,10 +341,8 @@ def git_head(checkout: Path) -> str | None:
       stderr=subprocess.PIPE,
       check=False,
   )
-  if completed.returncode != 0:
-    return None
   value = completed.stdout.strip()
-  return value if HEX40_RE.fullmatch(value) else None
+  return value if completed.returncode == 0 and HEX40_RE.fullmatch(value) else None
 
 
 def canonical_sha(value: dict[str, Any]) -> str:
@@ -389,8 +379,8 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
     violations.extend(f"missing entry point: {entry}" for entry in missing_entries)
 
   queue = deque(sorted(entry for entry in entry_points if entry in index))
-  visited: set[str] = set()
   queued = set(queue)
+  visited: set[str] = set()
   edges: set[Edge] = set()
   unresolved: set[Reference] = set()
   wildcard_imports: set[Reference] = set()
@@ -405,8 +395,7 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
     unit = index[fqcn]
     prohibited.update(direct_prohibited_references(fqcn, unit, prohibited_prefixes))
 
-    is_boundary = fqcn in boundaries
-    if is_boundary:
+    if fqcn in boundaries:
       reached_boundaries.add(fqcn)
       if not policy["follow_reviewed_boundaries"]:
         continue
@@ -441,12 +430,11 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
   nodes: list[dict[str, Any]] = []
   for fqcn in sorted(visited):
     unit = index[fqcn]
-    if fqcn in entry_points:
-      classification = "entry-point"
-    elif fqcn in reached_boundaries:
-      classification = boundaries[fqcn]["classification"]
-    else:
-      classification = "source-dependency"
+    classification = (
+        "entry-point" if fqcn in entry_points
+        else boundaries[fqcn]["classification"] if fqcn in reached_boundaries
+        else "source-dependency"
+    )
     node: dict[str, Any] = {
         "class": fqcn,
         "path": unit.relative_path,
@@ -479,12 +467,8 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
           for fqcn in sorted(reached_boundaries)
       ],
       "prohibited_references": [reference.__dict__ for reference in sorted(prohibited)],
-      "unresolved_internal_references": [
-          reference.__dict__ for reference in sorted(unresolved)
-      ],
-      "internal_wildcard_imports": [
-          reference.__dict__ for reference in sorted(wildcard_imports)
-      ],
+      "unresolved_internal_references": [reference.__dict__ for reference in sorted(unresolved)],
+      "internal_wildcard_imports": [reference.__dict__ for reference in sorted(wildcard_imports)],
       "summary": {
           "indexed_top_level_types": len(index),
           "reachable_source_types": len(visited),
@@ -493,7 +477,7 @@ def audit(checkout: Path, manifest: dict[str, Any], require_commit: bool) -> tup
           "prohibited_references": len(prohibited),
           "unresolved_internal_references": len(unresolved),
           "internal_wildcard_imports": len(wildcard_imports),
-          "violations": len(violations),
+          "violations": len(set(violations)),
       },
       "status": "pass" if not violations else "fail",
       "violations": sorted(set(violations)),
@@ -527,8 +511,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
   args = build_parser().parse_args()
   try:
-    manifest = load_json(args.manifest)
-    report, violations = audit(args.checkout, manifest, args.require_commit)
+    report, violations = audit(args.checkout, load_json(args.manifest), args.require_commit)
   except (AuditError, OSError) as exc:
     print(f"Source closure audit refused: {exc}", file=sys.stderr)
     return 2
