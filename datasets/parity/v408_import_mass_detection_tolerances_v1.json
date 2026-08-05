@@ -1,0 +1,6 @@
+{
+  "retention_time_minutes": {
+    "absolute": 1e-7,
+    "relative": 6e-8
+  }
+}
