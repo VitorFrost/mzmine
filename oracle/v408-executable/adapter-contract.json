@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract_id": "mzmine-v4.0.8-parser-centroid-adapters-v1",
   "oracle_commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
-  "source_closure_sha256": "eeb5ac4f151b80b567da045b0fb1d360b5d754eafa212277ea0f4f696596cda3",
+  "source_closure_sha256": "6662c196b9487154cf7efb4aafb1574c42a6c90a554c8805c6585b5787a0ffd6",
   "adapter_lock_sha256": "1f3fa33550bfd1742c1af0b809ebb700794979553489d6278731f43cfdfb2e43",
   "adapters": [
     {
