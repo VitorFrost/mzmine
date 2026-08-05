@@ -61,9 +61,13 @@ concurrency:
 
 jobs:
   execute-oracle-slice:
-    name: Execute and compare public parser and centroid slice
+    name: Execute and compare MS${{ matrix.source_ms_level }} parser and centroid slice
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        source_ms_level: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.source_ms_level) || '["1","2"]') }}
     env:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
@@ -81,7 +85,7 @@ jobs:
       INPUT_RELATIVE_PATH: zenodo/14001110/Banane_30ngmL_001.mzML
       INPUT_SIZE: "87090777"
       INPUT_SHA256: 2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d
-      SOURCE_MS_LEVEL: ${{ inputs.source_ms_level || '1' }}
+      SOURCE_MS_LEVEL: ${{ matrix.source_ms_level }}
       REPORT_FILE: oracle/v408-executable/evidence/v408-import-mass-detection.json
       OPEN_OFFLINE_REPORT_FILE: oracle/v408-executable/evidence/open-offline-import-mass-detection.json
       DIFFERENCE_REPORT_FILE: oracle/v408-executable/evidence/v408-open-offline-differences.json
@@ -143,7 +147,7 @@ jobs:
             echo "source_ref=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
             echo "source_sha=${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-${GITHUB_SHA}}"
             echo "source_ms_level=${SOURCE_MS_LEVEL}"
-            echo "source_level_selection=manual"
+            echo "source_level_selection=manual-or-explicit-ci-matrix"
             git rev-parse HEAD
             sha256sum "${ADAPTER_LOCK}"
             sha256sum "${ADAPTER_CONTRACT}"
@@ -428,7 +432,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v408-executable-oracle-${{ github.run_id }}
+          name: v408-executable-oracle-ms${{ matrix.source_ms_level }}-${{ github.run_id }}
           path: |
             oracle/v408-executable/evidence/
             oracle/v408-executable/build/reports/
