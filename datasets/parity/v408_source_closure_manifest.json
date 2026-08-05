@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v5",
+  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v6",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -24,7 +24,8 @@
     "mzmine-community/src/main/java",
     "utils/src/main/java",
     "taskcontroller/src/main/java",
-    "javafx-framework/src/main/java"
+    "javafx-framework/src/main/java",
+    "open-offline-boundaries/src/main/java"
   ],
   "entry_points": [
     "io.github.mzmine.modules.io.import_rawdata_mzml.msdk.MzMLFileImportMethod",
@@ -49,11 +50,12 @@
       ]
     },
     "io.github.mzmine.util.MemoryMapStorage": {
-      "classification": "unavailable-storage-boundary",
-      "reason": "This type is referenced by public source but is absent from the frozen public source tree. The parser accepts null storage and the oracle uses that public path; no closed implementation is reconstructed.",
-      "source_expected": false,
+      "classification": "null-storage-type-boundary",
+      "reason": "The public parser references a type absent from the frozen public source tree. The fork supplies a behavior-free type only so the exact public null-storage path can compile; no constructor, factory, memory-map, cleanup, or persistence behavior is reconstructed.",
+      "source_origin": "oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java",
+      "source_expected": true,
       "preserved_members": [
-        "nullable constructor argument only"
+        "type identity for nullable arguments only"
       ]
     },
     "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.ScanImportProcessorConfig": {
