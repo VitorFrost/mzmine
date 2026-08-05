@@ -33,9 +33,7 @@ import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 public final class CentroidMassDetector {
 
   public double[][] getMassValues(double[] mzs, double[] intensities, double noiseLevel) {
-    if (mzs.length != intensities.length) {
-      throw new IllegalArgumentException("m/z and intensity arrays must have equal length");
-    }
+    assert mzs.length == intensities.length;
 
     final int points = mzs.length;
     final DoubleArrayList pickedMZs = new DoubleArrayList(points);
