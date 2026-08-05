@@ -44,14 +44,12 @@ class OpenOfflineDifferentialReportMainTest {
   @Test
   void usesTheSameGovernedSettingsIdentityAsTheV408Oracle() throws Exception {
     String canonical = OpenOfflineDifferentialReportMain.canonicalSettings(1, 0d);
+    String actualHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+        .digest(canonical.getBytes(StandardCharsets.UTF_8)));
     assertEquals("mzml-import-centroid-source-ms1-v1",
         OpenOfflineDifferentialReportMain.mappingId(1));
-    assertEquals(
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-            .digest(canonical.getBytes(StandardCharsets.UTF_8))),
-        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-            .digest(OpenOfflineDifferentialReportMain.canonicalSettings(1, 0d)
-                .getBytes(StandardCharsets.UTF_8))));
+    assertEquals("4da3746ed616bed74b46e1fbd3f41fdbf063e619fb2611cf412b46ef036235d9",
+        actualHash);
   }
 
   @Test
