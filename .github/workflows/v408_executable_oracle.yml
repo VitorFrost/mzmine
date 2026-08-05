@@ -2,31 +2,55 @@ name: MZmine v4.0.8 executable oracle
 
 on:
   workflow_dispatch:
+    inputs:
+      source_ms_level:
+        description: "MS level manually selected as the source-data stream. No instrument inference is performed."
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
   push:
     branches:
       - "agent/v408-executable-*"
+      - "agent/v408-governed-*"
       - "open-offline-main"
     paths:
       - ".github/workflows/v408_executable_oracle.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
+      - "datasets/parity/v408_import_mass_detection_tolerances_v1.json"
+      - "datasets/public_validation_manifest.json"
       - "oracle/v408-boundaries/**"
       - "oracle/v408-executable/**"
       - "scripts/audit_v408_source_closure.py"
+      - "scripts/compare_mzmine_stage_reports.py"
+      - "scripts/fetch_public_test_data.py"
       - "scripts/inventory_v408_adapters.py"
       - "scripts/prepare_v408_executable_slice.py"
       - "scripts/tests/test_*v408*.py"
+      - "src/main/java/io/github/mzmine/modules/io/import_rawdata_mzml/**"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_massdetection/centroid/**"
+      - "src/test/java/io/github/mzmine/parity/**"
   pull_request:
     branches:
       - "open-offline-main"
     paths:
       - ".github/workflows/v408_executable_oracle.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
+      - "datasets/parity/v408_import_mass_detection_tolerances_v1.json"
+      - "datasets/public_validation_manifest.json"
       - "oracle/v408-boundaries/**"
       - "oracle/v408-executable/**"
       - "scripts/audit_v408_source_closure.py"
+      - "scripts/compare_mzmine_stage_reports.py"
+      - "scripts/fetch_public_test_data.py"
       - "scripts/inventory_v408_adapters.py"
       - "scripts/prepare_v408_executable_slice.py"
       - "scripts/tests/test_*v408*.py"
+      - "src/main/java/io/github/mzmine/modules/io/import_rawdata_mzml/**"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_massdetection/centroid/**"
+      - "src/test/java/io/github/mzmine/parity/**"
 
 permissions:
   contents: read
@@ -36,10 +60,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compile-oracle-slice:
-    name: Compile public parser and centroid slice
+  execute-oracle-slice:
+    name: Execute and compare MS${{ matrix.source_ms_level }} parser and centroid slice
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        source_ms_level: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.source_ms_level) || '["1","2"]') }}
     env:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
@@ -51,6 +79,18 @@ jobs:
       PREPARATION_MANIFEST: oracle/v408-executable/evidence/v408-executable-source-manifest.json
       BOUNDARY_SOURCE: oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
       MOUNTED_BOUNDARY_SOURCE: build/oracle/mzmine-v4.0.8/open-offline-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
+      DATASET_ID: zenodo-14001110-banane-30ngml-001
+      DATA_ROOT: build/public_validation_data
+      INPUT_FILE: build/public_validation_data/zenodo/14001110/Banane_30ngmL_001.mzML
+      INPUT_RELATIVE_PATH: zenodo/14001110/Banane_30ngmL_001.mzML
+      INPUT_SIZE: "87090777"
+      INPUT_SHA256: 2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d
+      SOURCE_MS_LEVEL: ${{ matrix.source_ms_level }}
+      REPORT_FILE: oracle/v408-executable/evidence/v408-import-mass-detection.json
+      OPEN_OFFLINE_REPORT_FILE: oracle/v408-executable/evidence/open-offline-import-mass-detection.json
+      DIFFERENCE_REPORT_FILE: oracle/v408-executable/evidence/v408-open-offline-differences.json
+      TOLERANCE_FILE: datasets/parity/v408_import_mass_detection_tolerances_v1.json
+      GOVERNED_DIFFERENCE_REPORT_FILE: oracle/v408-executable/evidence/v408-open-offline-governed-differences.json
 
     steps:
       - name: Check out open-offline harness
@@ -96,19 +136,23 @@ jobs:
           --lock "${ADAPTER_LOCK}"
           --output "${ADAPTER_INVENTORY}"
 
-      - name: Record adapter inventory provenance
+      - name: Record adapter and tolerance provenance
         shell: bash
         run: |
           set -euo pipefail
+          test -f "${TOLERANCE_FILE}"
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "event=${GITHUB_EVENT_NAME}"
             echo "source_ref=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
             echo "source_sha=${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-${GITHUB_SHA}}"
+            echo "source_ms_level=${SOURCE_MS_LEVEL}"
+            echo "source_level_selection=manual-or-explicit-ci-matrix"
             git rev-parse HEAD
             sha256sum "${ADAPTER_LOCK}"
             sha256sum "${ADAPTER_CONTRACT}"
             sha256sum "${ADAPTER_INVENTORY}"
+            sha256sum "${TOLERANCE_FILE}"
           } > oracle/v408-executable/evidence/v408-adapter-inventory-provenance.txt
 
       - name: Check out exact public v4.0.8 oracle
@@ -159,6 +203,36 @@ jobs:
             exit 1
           fi
 
+      - name: Download and verify governed public mzML
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --dataset "${DATASET_ID}"
+          --output-dir "${DATA_ROOT}"
+          --timeout 180
+          --retries 3
+
+      - name: Verify downloaded bytes again
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --dataset "${DATASET_ID}"
+          --output-dir "${DATA_ROOT}"
+          --verify-existing
+
+      - name: Verify physical execution paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "${GITHUB_WORKSPACE}/${INPUT_FILE}"
+          test "$(stat -c %s "${GITHUB_WORKSPACE}/${INPUT_FILE}")" = "${INPUT_SIZE}"
+          mkdir -p "$(dirname "${GITHUB_WORKSPACE}/${REPORT_FILE}")"
+          mkdir -p "$(dirname "${GITHUB_WORKSPACE}/${OPEN_OFFLINE_REPORT_FILE}")"
+          {
+            echo "input_physical_path=${GITHUB_WORKSPACE}/${INPUT_FILE}"
+            echo "oracle_output_physical_path=${GITHUB_WORKSPACE}/${REPORT_FILE}"
+            echo "candidate_output_physical_path=${GITHUB_WORKSPACE}/${OPEN_OFFLINE_REPORT_FILE}"
+            echo "input_portable_identity=${INPUT_RELATIVE_PATH}"
+          } > oracle/v408-executable/evidence/v408-execution-paths.txt
+
       - name: Record resolved public compile dependencies
         shell: bash
         run: |
@@ -166,29 +240,215 @@ jobs:
           gradle -p oracle/v408-executable printCompileClasspath --no-daemon \
             2>&1 | tee oracle/v408-executable/evidence/v408-compile-classpath.txt
 
-      - name: Compile Java 21 oracle slice
+      - name: Compile and test Java 21 oracle slice
         shell: bash
         run: |
           set -o pipefail
-          gradle -p oracle/v408-executable clean compileJava --no-daemon --stacktrace \
-            2>&1 | tee oracle/v408-executable/evidence/v408-compile.log
+          gradle -p oracle/v408-executable clean test --no-daemon --stacktrace \
+            2>&1 | tee oracle/v408-executable/evidence/v408-test.log
 
-      - name: Upload executable-oracle evidence
+      - name: Execute governed v4.0.8 parser and centroid report
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle -p oracle/v408-executable run --no-daemon --stacktrace \
+            --args="--input ${GITHUB_WORKSPACE}/${INPUT_FILE} --output ${GITHUB_WORKSPACE}/${REPORT_FILE} --dataset-id ${DATASET_ID} --relative-path ${INPUT_RELATIVE_PATH} --expected-size ${INPUT_SIZE} --expected-sha256 ${INPUT_SHA256} --source-ms-level ${SOURCE_MS_LEVEL} --noise-level 0.0" \
+            2>&1 | tee oracle/v408-executable/evidence/v408-execution.log
+
+      - name: Validate and summarize normalized v4.0.8 report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          from scripts.compare_mzmine_stage_reports import load_report
+
+          report_path = Path("oracle/v408-executable/evidence/v408-import-mass-detection.json")
+          report = load_report(report_path)
+          summary = {
+              "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+              "producer_commit": report["producer"]["commit"],
+              "input_sha256": report["input"]["sha256"],
+              "settings_mapping_id": report["settings"]["mapping_id"],
+              "settings_sha256": report["settings"]["sha256"],
+              "import_record_count": len(report["stages"]["import"]["records"]),
+              "import_total_point_count": report["stages"]["import"]["summary"]["total_point_count"],
+              "mass_detection_record_count": len(report["stages"]["mass_detection"]["records"]),
+              "mass_detection_total_point_count": report["stages"]["mass_detection"]["summary"]["total_point_count"],
+          }
+          Path("oracle/v408-executable/evidence/v408-report-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Set up Java 20 for open-offline candidate
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Execute governed open-offline parser and centroid report
+        shell: bash
+        env:
+          OPEN_OFFLINE_DIFFERENTIAL_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
+          OPEN_OFFLINE_DIFFERENTIAL_OUTPUT: ${{ github.workspace }}/${{ env.OPEN_OFFLINE_REPORT_FILE }}
+          OPEN_OFFLINE_DIFFERENTIAL_DATASET_ID: ${{ env.DATASET_ID }}
+          OPEN_OFFLINE_DIFFERENTIAL_RELATIVE_PATH: ${{ env.INPUT_RELATIVE_PATH }}
+          OPEN_OFFLINE_DIFFERENTIAL_EXPECTED_SIZE: ${{ env.INPUT_SIZE }}
+          OPEN_OFFLINE_DIFFERENTIAL_EXPECTED_SHA256: ${{ env.INPUT_SHA256 }}
+          OPEN_OFFLINE_DIFFERENTIAL_SOURCE_MS_LEVEL: ${{ env.SOURCE_MS_LEVEL }}
+          OPEN_OFFLINE_DIFFERENTIAL_NOISE_LEVEL: "0.0"
+          OPEN_OFFLINE_DIFFERENTIAL_PRODUCER_REF: ${{ github.head_ref || github.ref_name }}
+          OPEN_OFFLINE_DIFFERENTIAL_PRODUCER_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          ./gradlew test \
+            --tests io.github.mzmine.parity.OpenOfflineDifferentialReportIntegrationTest \
+            --rerun-tasks --no-daemon --stacktrace \
+            2>&1 | tee oracle/v408-executable/evidence/open-offline-execution.log
+
+      - name: Validate and summarize normalized open-offline report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          from scripts.compare_mzmine_stage_reports import load_report
+
+          report_path = Path("oracle/v408-executable/evidence/open-offline-import-mass-detection.json")
+          report = load_report(report_path)
+          summary = {
+              "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+              "producer_commit": report["producer"]["commit"],
+              "input_sha256": report["input"]["sha256"],
+              "settings_mapping_id": report["settings"]["mapping_id"],
+              "settings_sha256": report["settings"]["sha256"],
+              "import_record_count": len(report["stages"]["import"]["records"]),
+              "import_total_point_count": report["stages"]["import"]["summary"]["total_point_count"],
+              "mass_detection_record_count": len(report["stages"]["mass_detection"]["records"]),
+              "mass_detection_total_point_count": report["stages"]["mass_detection"]["summary"]["total_point_count"],
+          }
+          Path("oracle/v408-executable/evidence/open-offline-report-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Compare all records with strict default tolerances
+        shell: bash
+        run: |
+          set +e
+          python scripts/compare_mzmine_stage_reports.py \
+            "${REPORT_FILE}" "${OPEN_OFFLINE_REPORT_FILE}" \
+            --output "${DIFFERENCE_REPORT_FILE}" \
+            2>&1 | tee oracle/v408-executable/evidence/v408-open-offline-comparison.log
+          comparison_status=${PIPESTATUS[0]}
+          set -e
+          echo "${comparison_status}" > oracle/v408-executable/evidence/v408-open-offline-comparison-exit-code.txt
+          test -f "${DIFFERENCE_REPORT_FILE}"
+          if [ "${comparison_status}" -gt 1 ]; then
+            exit "${comparison_status}"
+          fi
+
+      - name: Summarize strict differential result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          path = Path("oracle/v408-executable/evidence/v408-open-offline-differences.json")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          kinds = Counter(item["kind"] for item in report["differences"])
+          fields = Counter(f"{item['stage']}:{item['field']}" for item in report["differences"])
+          summary = {
+              "verdict": report["verdict"],
+              "difference_count": report["difference_count"],
+              "comparison_sha256": report["comparison_sha256"],
+              "stage_record_counts": report["stage_record_counts"],
+              "difference_kinds": dict(sorted(kinds.items())),
+              "top_difference_fields": dict(fields.most_common(25)),
+          }
+          Path("oracle/v408-executable/evidence/v408-open-offline-difference-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Require equivalence under governed binary32 RT tolerance
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/compare_mzmine_stage_reports.py \
+            "${REPORT_FILE}" "${OPEN_OFFLINE_REPORT_FILE}" \
+            --tolerances "${TOLERANCE_FILE}" \
+            --output "${GOVERNED_DIFFERENCE_REPORT_FILE}" \
+            2>&1 | tee oracle/v408-executable/evidence/v408-open-offline-governed-comparison.log
+
+      - name: Summarize governed differential result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          strict_path = Path("oracle/v408-executable/evidence/v408-open-offline-differences.json")
+          governed_path = Path(
+              "oracle/v408-executable/evidence/v408-open-offline-governed-differences.json")
+          strict = json.loads(strict_path.read_text(encoding="utf-8"))
+          governed = json.loads(governed_path.read_text(encoding="utf-8"))
+          if governed["verdict"] != "equivalent-within-tolerance":
+            raise SystemExit("Governed comparison did not establish equivalence")
+          if governed["difference_count"] != 0:
+            raise SystemExit("Governed comparison retained unexpected differences")
+          summary = {
+              "strict_verdict": strict["verdict"],
+              "strict_difference_count": strict["difference_count"],
+              "strict_comparison_sha256": strict["comparison_sha256"],
+              "governed_verdict": governed["verdict"],
+              "governed_difference_count": governed["difference_count"],
+              "governed_comparison_sha256": governed["comparison_sha256"],
+              "tolerance_contract": "v408_import_mass_detection_tolerances_v1.json",
+              "tolerance_contract_sha256": hashlib.sha256(
+                  Path("datasets/parity/v408_import_mass_detection_tolerances_v1.json").read_bytes()
+              ).hexdigest(),
+          }
+          Path("oracle/v408-executable/evidence/v408-open-offline-governed-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload executable-oracle and differential evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v408-executable-oracle-${{ github.run_id }}
+          name: v408-executable-oracle-ms${{ matrix.source_ms_level }}-${{ github.run_id }}
           path: |
             oracle/v408-executable/evidence/
             oracle/v408-executable/build/reports/
+            oracle/v408-executable/build/test-results/
+            build/reports/tests/test/
+            build/test-results/test/
           if-no-files-found: error
           retention-days: 30
 
-      - name: Delete upstream checkout and generated source
+      - name: Delete upstream checkout, generated source, and raw bytes
         if: always()
         shell: bash
         run: |
           rm -rf build/oracle
           rm -rf oracle/v408-executable/generated-src
+          rm -rf "${DATA_ROOT}"
           test ! -e build/oracle
           test ! -e oracle/v408-executable/generated-src
+          test ! -e "${DATA_ROOT}"

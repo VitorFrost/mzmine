@@ -1,5 +1,6 @@
 plugins {
   java
+  application
 }
 
 repositories {
@@ -14,11 +15,18 @@ java {
 
 sourceSets {
   main {
-    java.setSrcDirs(listOf(layout.projectDirectory.dir("generated-src/main/java")))
+    java.setSrcDirs(listOf(
+      layout.projectDirectory.dir("generated-src/main/java"),
+      layout.projectDirectory.dir("harness/src/main/java")
+    ))
   }
   test {
-    java.setSrcDirs(emptyList<String>())
+    java.setSrcDirs(listOf(layout.projectDirectory.dir("harness/src/test/java")))
   }
+}
+
+application {
+  mainClass.set("io.github.mzmine.oracle.V408DifferentialReportMain")
 }
 
 dependencies {
@@ -30,6 +38,8 @@ dependencies {
   implementation("org.apache.commons:commons-lang3:3.0")
   implementation("com.fasterxml:aalto-xml:1.3.2")
   implementation("com.fasterxml.woodstox:woodstox-core:6.6.0")
+  testImplementation(platform("org.junit:junit-bom:5.10.2"))
+  testImplementation("org.junit.jupiter:junit-jupiter")
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -39,6 +49,7 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 tasks.withType<Test>().configureEach {
+  useJUnitPlatform()
   jvmArgs("--enable-preview")
 }
 
