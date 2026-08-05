@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This record defines the public Java source slice that will be used to build the first executable
-MZmine v4.0.8 behavioral oracle for direct comparison with the open-offline fork.
+This record defines the public Java source slice used to build the first executable MZmine v4.0.8
+behavioral oracle for direct comparison with the open-offline fork.
 
 The oracle is limited to:
 
@@ -52,16 +52,28 @@ lifecycle behavior.
 ## Reviewed boundaries
 
 Some public classes contain both the required scientific member and unrelated application methods.
-The manifest records these as reviewed boundaries and names the preserved members. Examples include:
+The manifest records these as reviewed boundaries and names the preserved members. The executable
+build additionally freezes those members in:
 
-- `SimpleSpectralArrays`: preserve the primitive array record, exclude constructors from application
-  `Scan` objects;
-- `DataPointUtils`: preserve array conversion, exclude feature conversion;
-- `StorageUtils`: preserve the required array/buffer conversion, exclude feature-series storage;
-- `MetadataOnlyScan` and `RawDataFile`: no application object construction is performed;
-- `ScanImportProcessorConfig`: use a reviewed no-filter/no-advanced-processing adapter;
-- `CentroidMassDetector`: preserve `getMassValues(double[], double[], double)`;
-- `AbstractTask`: preserve only the cancellation/timestamp surface required by the parser call.
+- `oracle/v408-executable/adapter-lock.json` — exact file bytes and SHA-256;
+- `oracle/v408-executable/adapter-contract.json` — execution mode, preserved members, and explicitly
+  excluded behavior.
+
+The current boundaries include:
+
+- `SimpleSpectralArrays`: primitive arrays and count only; no constructors from application scans;
+- `DataPointUtils`: `getDoubleBufferAsArray(DoubleBuffer)` only;
+- `StorageUtils`: null-storage in-memory buffer conversion only; non-null storage is rejected;
+- `MetadataOnlyScan`: only the abstract metadata/array surface overridden by
+  `BuildingMzMLMsScan`;
+- `RawDataFile` and `MsMsInfo`: compile-time type identity only;
+- `DDAMsMsInfoImpl`: constructor-compatible but deliberately throws if the excluded application
+  object conversion is executed;
+- `MobilityType`: metadata identities `NONE`, `DRIFT_TUBE`, and `TIMS`, with no frame construction;
+- `ScanImportProcessorConfig`: always-match, identity-processing, no-import-mass-detection behavior;
+- `CentroidMassDetector`: exact `getMassValues(double[], double[], double)` method;
+- `AbstractTask`: minimal storage/timestamp/cancellation/status/error surface, without JavaFX,
+  listeners, priority, scheduling, or task-controller integration.
 
 A reviewed boundary is not evidence of equivalent behavior. It is an explicit statement that the
 excluded behavior is not executed by this oracle and must not enter the scientific comparison.
@@ -87,9 +99,9 @@ The type:
 
 This is a compile-time type boundary, not a reconstruction of unavailable code.
 
-## Validated closure result
+## Validated closure results and hash history
 
-The first passing focused audit produced:
+The public source graph has remained stable throughout the boundary-contract refinement:
 
 | Metric | Result |
 |---|---:|
@@ -101,37 +113,55 @@ The first passing focused audit produced:
 | Prohibited `io.mzio` references | 0 |
 | Unresolved internal references | 0 |
 | Policy violations | 0 |
-| Canonical closure SHA-256 | `eeb5ac4f151b80b567da045b0fb1d360b5d754eafa212277ea0f4f696596cda3` |
+
+Two canonical closure hashes are intentionally retained in the history:
+
+| Closure revision | SHA-256 | Meaning |
+|---|---|---|
+| First passing focused closure | `eeb5ac4f151b80b567da045b0fb1d360b5d754eafa212277ea0f4f696596cda3` | Established the 48-type focused graph and initial reviewed boundaries. |
+| Current member-corrected closure | `6662c196b9487154cf7efb4aafb1574c42a6c90a554c8805c6585b5787a0ffd6` | F-004 corrected classifications and exact preserved-member inventories without changing reachability. This is the hash bound by the executable adapter contract. |
 
 The earlier unbounded application-level graph reached 2,326 types and 16,952 edges. Reducing it to
 48 types was achieved by changing the entry layer and documenting unused API surfaces, not by
 allowing unresolved or proprietary dependencies.
 
+## Executable source-set status
+
+The focused slice has compiled successfully with Java 21 preview enabled using:
+
+- the exact public v4.0.8 commit;
+- 36 verified upstream classes plus 12 locked reviewed adapters;
+- 47 physical Java source files representing 48 top-level classes;
+- public dependencies resolved from Maven Central;
+- no JavaFX, application project, account/cloud, or `io.mzio` dependency expansion.
+
+Compilation is a source-compatibility gate only. It is not scientific equivalence evidence.
+
 ## What this proves
 
-A passing source-closure audit proves that:
+The source-closure and locked preparation gates prove that:
 
 - the declared upstream commit is reproducible;
 - the selected public source graph is deterministic;
 - all internal references in that graph resolve after mounting the documented null-only boundary;
 - no `io.mzio` reference is reachable;
-- every excluded application dependency is stopped at a reviewed boundary.
+- every excluded application dependency is stopped at a reviewed boundary;
+- every reached boundary has one exact locked adapter and semantic contract;
+- changing, deleting, or adding an adapter is rejected before generated source is copied;
+- the focused Java 21 source set compiles.
 
 It does **not** yet prove that:
 
-- the source slice compiles;
 - the parser produces the same normalized report as open-offline;
-- centroid mass detection is behaviorally equivalent;
+- centroid mass detection is behaviorally equivalent on the governed mzML bytes;
 - the remaining LC-MS workflow stages have v4.0.8 parity.
 
 ## Next gate
 
-The next implementation gate is an executable Java 21 source-slice build that:
+The next implementation gate is execution of the compiled Java 21 oracle that:
 
-1. checks out the exact v4.0.8 commit;
-2. mounts only reviewed boundary sources/adapters;
-3. compiles the declared parser and centroid method slice;
-4. imports the exact governed `Banane_30ngmL_001.mzML` bytes;
-5. applies the manually selected source MS level and explicit centroid noise level;
-6. emits the normalized differential stage-report contract;
-7. compares it with the existing open-offline report and retains every difference.
+1. imports the exact governed `Banane_30ngmL_001.mzML` bytes;
+2. applies the manually selected source MS level and explicit centroid noise level;
+3. emits the normalized differential stage-report contract;
+4. compares every normalized import and centroid value with the existing open-offline report;
+5. retains all differences, tolerances, provenance, and failure history.
