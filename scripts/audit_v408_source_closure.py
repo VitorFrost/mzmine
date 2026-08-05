@@ -8,7 +8,8 @@ still inspected for direct prohibited references so the report explains why the 
 
 The parser indexes only declarations at Java brace depth zero. Nested classes with the same simple
 name in different files therefore remain implementation details and cannot create false duplicate
-fully qualified class names.
+fully qualified class names. Java files with no active top-level declaration are ignored; required
+entry points remain fail-closed after the index is built.
 """
 
 from __future__ import annotations
@@ -227,14 +228,11 @@ def parse_source(path: Path, checkout: Path) -> SourceUnit:
   code = strip_comments_and_literals(text)
   package_match = PACKAGE_RE.search(code)
   package = package_match.group(1) if package_match else ""
-  types = top_level_types(code)
-  if not types:
-    raise AuditError(f"Java source contains no top-level declaration: {path}")
   return SourceUnit(
       path=path,
       relative_path=path.relative_to(checkout).as_posix(),
       package=package,
-      top_level_types=types,
+      top_level_types=top_level_types(code),
       text=text,
       code=code,
       sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
