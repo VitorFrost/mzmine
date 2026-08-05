@@ -24,7 +24,12 @@ package io.github.mzmine.parity;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import io.github.msdk.datamodel.MsScan;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -39,6 +44,22 @@ class OpenOfflineDifferentialReportMainTest {
     assertArrayEquals(new int[]{0, 1}, OpenOfflineDifferentialReportMain.sampleIndexes(2));
     assertArrayEquals(new int[]{0, 2, 4}, OpenOfflineDifferentialReportMain.sampleIndexes(5));
     assertArrayEquals(new int[]{0, 3, 5}, OpenOfflineDifferentialReportMain.sampleIndexes(6));
+  }
+
+  @Test
+  void requestsParserOwnedArraysToAvoidCachedZeroDestinationRegression() {
+    MsScan scan = mock(MsScan.class);
+    when(scan.getNumberOfDataPoints()).thenReturn(3);
+    when(scan.getMzValues((double[]) isNull())).thenReturn(new double[]{50d, 100d, 150d});
+    when(scan.getIntensityValues((float[]) isNull())).thenReturn(new float[]{1f, 2f, 3f});
+
+    OpenOfflineDifferentialReportMain.SpectralArrays arrays =
+        OpenOfflineDifferentialReportMain.arrays(scan);
+
+    assertArrayEquals(new double[]{50d, 100d, 150d}, arrays.mzs());
+    assertArrayEquals(new double[]{1d, 2d, 3d}, arrays.intensities());
+    verify(scan).getMzValues((double[]) isNull());
+    verify(scan).getIntensityValues((float[]) isNull());
   }
 
   @Test
