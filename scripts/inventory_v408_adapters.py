@@ -16,11 +16,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
-PACKAGE_RE = re.compile(r"\bpackage\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;")
-TYPE_RE = re.compile(
-    r"\b(?:public\s+)?(?:final\s+|abstract\s+)?(?:class|interface|enum|record)\s+"
-    r"([A-Za-z_$][\w$]*)\b"
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+  sys.path.insert(0, str(SCRIPT_DIR))
+
+from audit_v408_source_closure import (  # noqa: E402
+    PACKAGE_RE,
+    strip_comments_and_literals,
+    top_level_types,
 )
+
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -43,11 +48,20 @@ def source_identity(path: Path, root: Path) -> tuple[str, str, bytes]:
     text = data.decode("utf-8")
   except UnicodeDecodeError as exc:
     raise InventoryError(f"adapter is not UTF-8: {path}") from exc
-  package_match = PACKAGE_RE.search(text)
-  type_match = TYPE_RE.search(text)
-  if package_match is None or type_match is None:
-    raise InventoryError(f"adapter lacks package or top-level type declaration: {path}")
-  fqcn = f"{package_match.group(1)}.{type_match.group(1)}"
+
+  try:
+    code = strip_comments_and_literals(text)
+    declared_types = top_level_types(code)
+  except ValueError as exc:
+    raise InventoryError(f"cannot parse Java adapter {path}: {exc}") from exc
+  package_match = PACKAGE_RE.search(code)
+  if package_match is None or len(declared_types) != 1:
+    raise InventoryError(
+        f"adapter requires exactly one active top-level type and one package: {path}; "
+        f"types={list(declared_types)}"
+    )
+
+  fqcn = f"{package_match.group(1)}.{declared_types[0]}"
   expected_relative = Path(*fqcn.split(".")).with_suffix(".java")
   actual_relative = path.relative_to(root)
   if actual_relative != expected_relative:
