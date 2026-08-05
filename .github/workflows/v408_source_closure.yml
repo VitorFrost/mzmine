@@ -49,11 +49,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Prepare evidence directory
+        run: mkdir -p parity-artifacts
+
       - name: Test source closure auditor
-        run: >-
-          python -m unittest
-          scripts.tests.test_audit_v408_source_closure
-          -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest scripts.tests.test_audit_v408_source_closure -v \
+            2>&1 | tee parity-artifacts/source-closure-unit-tests.txt
 
       - name: Check out exact public v4.0.8 oracle
         uses: actions/checkout@v4
@@ -72,7 +76,6 @@ jobs:
           test "${actual}" = "${ORACLE_COMMIT}"
           test -f "${ORACLE_PATH}/LICENSE.txt"
           test -f "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
-          mkdir -p parity-artifacts
           {
             echo "oracle_repository=mzmine/mzmine"
             echo "oracle_tag=v4.0.8"
