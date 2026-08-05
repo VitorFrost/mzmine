@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "contract_id": "mzmine-v4.0.8-parser-centroid-adapters-v1",
+  "oracle_commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+  "source_closure_sha256": "eeb5ac4f151b80b567da045b0fb1d360b5d754eafa212277ea0f4f696596cda3",
+  "adapter_lock_sha256": "1f3fa33550bfd1742c1af0b809ebb700794979553489d6278731f43cfdfb2e43",
+  "adapters": [
+    {
+      "class": "io.github.mzmine.datamodel.MetadataOnlyScan",
+      "execution_mode": "compile-and-executed-contract",
+      "preserved_members": [
+        "getNumberOfDataPoints()",
+        "getTIC()",
+        "getMzValues(double[])",
+        "getIntensityValues(double[])",
+        "getSpectrumType()",
+        "getScanningMZRange()",
+        "getDataPointMZRange()",
+        "getDataFile()",
+        "getScanNumber()",
+        "getScanDefinition()",
+        "getMSLevel()",
+        "getRetentionTime()",
+        "getInjectionTime()",
+        "getMsMsInfo()"
+      ],
+      "excluded_behavior": "No application Scan hierarchy, mass lists, project registration, JavaFX, feature lists, or GUI behavior."
+    },
+    {
+      "class": "io.github.mzmine.datamodel.MobilityType",
+      "execution_mode": "metadata-identity-only",
+      "preserved_members": [
+        "NONE",
+        "DRIFT_TUBE",
+        "TIMS"
+      ],
+      "excluded_behavior": "No IMS frame construction, formatting preferences, feature data, or mobility workflow execution."
+    },
+    {
+      "class": "io.github.mzmine.datamodel.RawDataFile",
+      "execution_mode": "compile-only-type-identity",
+      "preserved_members": [],
+      "excluded_behavior": "No raw-data object construction, scan storage, project registration, observable lists, or persistence."
+    },
+    {
+      "class": "io.github.mzmine.datamodel.featuredata.impl.StorageUtils",
+      "execution_mode": "executed-null-storage-method",
+      "preserved_members": [
+        "storeValuesToDoubleBuffer(MemoryMapStorage, double[])"
+      ],
+      "excluded_behavior": "Non-null storage, memory mapping, persistence, cleanup, and feature-series storage are unsupported and must fail."
+    },
+    {
+      "class": "io.github.mzmine.datamodel.impl.DDAMsMsInfoImpl",
+      "execution_mode": "compile-only-explicitly-unsupported",
+      "preserved_members": [
+        "DDAMsMsInfoImpl(Double, Integer, Float, MetadataOnlyScan, MetadataOnlyScan, int, ActivationMethod, Range<Double>)"
+      ],
+      "excluded_behavior": "Construction always throws; normalized output reads precursor and isolation records directly."
+    },
+    {
+      "class": "io.github.mzmine.datamodel.msms.MsMsInfo",
+      "execution_mode": "compile-only-type-identity",
+      "preserved_members": [],
+      "excluded_behavior": "No application precursor-object persistence, copying, XML serialization, or scan linkage."
+    },
+    {
+      "class": "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector",
+      "execution_mode": "executed-scientific-method",
+      "preserved_members": [
+        "getMassValues(double[], double[], double)"
+      ],
+      "excluded_behavior": "No GUI parameter set, MassSpectrum overload, isotope-below-noise path, or module integration."
+    },
+    {
+      "class": "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.ScanImportProcessorConfig",
+      "execution_mode": "executed-explicit-no-processing",
+      "preserved_members": [
+        "ScanImportProcessorConfig()",
+        "noProcessing()",
+        "scanFilter().matches(BuildingMzMLMsScan)",
+        "processor().processScan(BuildingMzMLMsScan, SimpleSpectralArrays)",
+        "isMassDetectActive(int)"
+      ],
+      "excluded_behavior": "No scan exclusion, advanced import processing, manufacturer inference, instrument inference, or automatic source-MS-level selection."
+    },
+    {
+      "class": "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.SimpleSpectralArrays",
+      "execution_mode": "executed-primitive-array-record",
+      "preserved_members": [
+        "SimpleSpectralArrays(double[], double[])",
+        "mzs()",
+        "intensities()",
+        "getNumberOfDataPoints()"
+      ],
+      "excluded_behavior": "No constructors from application Scan objects or links to frame, feature, project, or GUI types."
+    },
+    {
+      "class": "io.github.mzmine.taskcontrol.AbstractTask",
+      "execution_mode": "executed-minimal-lifecycle",
+      "preserved_members": [
+        "protected storage",
+        "AbstractTask(MemoryMapStorage, Instant)",
+        "getModuleCallDate()",
+        "isCanceled()",
+        "cancel()",
+        "getStatus()",
+        "setStatus(TaskStatus)",
+        "getErrorMessage()",
+        "setErrorMessage(String)",
+        "getTaskDescription()",
+        "getFinishedPercentage()",
+        "run()"
+      ],
+      "excluded_behavior": "No JavaFX properties, listeners, priority, scheduling, task controller, or desktop lifecycle."
+    },
+    {
+      "class": "io.github.mzmine.util.DataPointUtils",
+      "execution_mode": "executed-buffer-array-method",
+      "preserved_members": [
+        "getDoubleBufferAsArray(DoubleBuffer)"
+      ],
+      "excluded_behavior": "No feature conversion, data-point object conversion, sorting, or application utility graph."
+    },
+    {
+      "class": "io.github.mzmine.util.MemoryMapStorage",
+      "execution_mode": "compile-only-null-type-boundary",
+      "preserved_members": [],
+      "excluded_behavior": "No construction, factory, memory mapping, buffer allocation, persistence, cleanup, or lifecycle behavior."
+    }
+  ]
+}
