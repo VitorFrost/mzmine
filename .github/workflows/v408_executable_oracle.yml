@@ -60,13 +60,15 @@ jobs:
           python-version: "3.12"
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Gradle cache
+      - name: Set up Java 21 compatible Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
       - name: Prepare evidence directory
         run: mkdir -p oracle/v408-executable/evidence
@@ -121,14 +123,14 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew -p oracle/v408-executable printCompileClasspath --no-daemon \
+          gradle -p oracle/v408-executable printCompileClasspath --no-daemon \
             2>&1 | tee oracle/v408-executable/evidence/v408-compile-classpath.txt
 
       - name: Compile Java 21 oracle slice
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew -p oracle/v408-executable clean compileJava --no-daemon --stacktrace \
+          gradle -p oracle/v408-executable clean compileJava --no-daemon --stacktrace \
             2>&1 | tee oracle/v408-executable/evidence/v408-compile.log
 
       - name: Upload executable-oracle evidence
