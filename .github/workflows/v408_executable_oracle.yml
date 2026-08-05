@@ -12,6 +12,7 @@ on:
       - "oracle/v408-boundaries/**"
       - "oracle/v408-executable/**"
       - "scripts/audit_v408_source_closure.py"
+      - "scripts/inventory_v408_adapters.py"
       - "scripts/prepare_v408_executable_slice.py"
       - "scripts/tests/test_*v408*.py"
   pull_request:
@@ -23,6 +24,7 @@ on:
       - "oracle/v408-boundaries/**"
       - "oracle/v408-executable/**"
       - "scripts/audit_v408_source_closure.py"
+      - "scripts/inventory_v408_adapters.py"
       - "scripts/prepare_v408_executable_slice.py"
       - "scripts/tests/test_*v408*.py"
 
@@ -42,6 +44,7 @@ jobs:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
       CLOSURE_PATH: oracle/v408-executable/evidence/v408-source-closure.json
+      ADAPTER_INVENTORY: oracle/v408-executable/evidence/v408-adapter-inventory.json
       GENERATED_SOURCE: oracle/v408-executable/generated-src/main/java
       PREPARATION_MANIFEST: oracle/v408-executable/evidence/v408-executable-source-manifest.json
       BOUNDARY_SOURCE: oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
@@ -81,6 +84,27 @@ jobs:
             -s scripts/tests \
             -p "test_*v408*.py" \
             -v 2>&1 | tee oracle/v408-executable/evidence/v408-oracle-unit-tests.txt
+
+      - name: Record exact checked-out adapter hashes
+        run: >-
+          python scripts/inventory_v408_adapters.py
+          --root oracle/v408-executable/adapters/src/main/java
+          --root oracle/v408-boundaries/src/main/java
+          --expected-count 12
+          --output "${ADAPTER_INVENTORY}"
+
+      - name: Record adapter inventory provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "event=${GITHUB_EVENT_NAME}"
+            echo "source_ref=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+            echo "source_sha=${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA:-${GITHUB_SHA}}"
+            git rev-parse HEAD
+            sha256sum "${ADAPTER_INVENTORY}"
+          } > oracle/v408-executable/evidence/v408-adapter-inventory-provenance.txt
 
       - name: Check out exact public v4.0.8 oracle
         uses: actions/checkout@v4
