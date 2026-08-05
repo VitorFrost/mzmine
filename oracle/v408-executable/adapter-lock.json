@@ -1,0 +1,91 @@
+{
+  "adapter_count": 12,
+  "adapters": [
+    {
+      "byte_length": 2476,
+      "class": "io.github.mzmine.datamodel.MetadataOnlyScan",
+      "relative_path": "io/github/mzmine/datamodel/MetadataOnlyScan.java",
+      "root_id": "executable-adapters",
+      "sha256": "b1f9150b40e74bc1c0c68e5ace043184b75dd9e3582b6377316b53781bc93e64"
+    },
+    {
+      "byte_length": 1486,
+      "class": "io.github.mzmine.datamodel.MobilityType",
+      "relative_path": "io/github/mzmine/datamodel/MobilityType.java",
+      "root_id": "executable-adapters",
+      "sha256": "1e56304a7a993962436d3ede9d80d043212b6eb2f361ff44c30b8831f23d6a53"
+    },
+    {
+      "byte_length": 1411,
+      "class": "io.github.mzmine.datamodel.RawDataFile",
+      "relative_path": "io/github/mzmine/datamodel/RawDataFile.java",
+      "root_id": "executable-adapters",
+      "sha256": "edee54fed8c41db1490a4ff9f467ce17b5cfcbbec6c100b6df203250a19b19bf"
+    },
+    {
+      "byte_length": 2087,
+      "class": "io.github.mzmine.datamodel.featuredata.impl.StorageUtils",
+      "relative_path": "io/github/mzmine/datamodel/featuredata/impl/StorageUtils.java",
+      "root_id": "executable-adapters",
+      "sha256": "819275af7f7fde8994dc5ff08acd53f13a01f90062842b37811fef7dd4bd7bc1"
+    },
+    {
+      "byte_length": 2334,
+      "class": "io.github.mzmine.datamodel.impl.DDAMsMsInfoImpl",
+      "relative_path": "io/github/mzmine/datamodel/impl/DDAMsMsInfoImpl.java",
+      "root_id": "executable-adapters",
+      "sha256": "c52a600a8affab20e209c5618c7c4c2c6d7a5a5cc7a7f7d13e874697edb172ad"
+    },
+    {
+      "byte_length": 1391,
+      "class": "io.github.mzmine.datamodel.msms.MsMsInfo",
+      "relative_path": "io/github/mzmine/datamodel/msms/MsMsInfo.java",
+      "root_id": "executable-adapters",
+      "sha256": "96756d5e9e731daa13f9e7661404e1a695ccd478d4ffa4262deac4c657005dae"
+    },
+    {
+      "byte_length": 2194,
+      "class": "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector",
+      "relative_path": "io/github/mzmine/modules/dataprocessing/featdet_massdetection/centroid/CentroidMassDetector.java",
+      "root_id": "executable-adapters",
+      "sha256": "a87b4601c7ffca735fdd501b7c2ef2d33ec9dcf7bbe04a02e5a40f75839524e0"
+    },
+    {
+      "byte_length": 2542,
+      "class": "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.ScanImportProcessorConfig",
+      "relative_path": "io/github/mzmine/modules/io/import_rawdata_all/spectral_processor/ScanImportProcessorConfig.java",
+      "root_id": "executable-adapters",
+      "sha256": "e95ff924741f7ce777dec9b98f36235ae1f0338317025c4ad21d898cdad43c3a"
+    },
+    {
+      "byte_length": 1681,
+      "class": "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.SimpleSpectralArrays",
+      "relative_path": "io/github/mzmine/modules/io/import_rawdata_all/spectral_processor/SimpleSpectralArrays.java",
+      "root_id": "executable-adapters",
+      "sha256": "d4154a985e76685e89e427209a6563c8b473f2b487ae0ebceeff315776892b69"
+    },
+    {
+      "byte_length": 3028,
+      "class": "io.github.mzmine.taskcontrol.AbstractTask",
+      "relative_path": "io/github/mzmine/taskcontrol/AbstractTask.java",
+      "root_id": "executable-adapters",
+      "sha256": "fbcf884861575da8f25a7f6537b6535a85079b6601eb5a2d71e3be96932cc91d"
+    },
+    {
+      "byte_length": 1669,
+      "class": "io.github.mzmine.util.DataPointUtils",
+      "relative_path": "io/github/mzmine/util/DataPointUtils.java",
+      "root_id": "executable-adapters",
+      "sha256": "7e3c0fac8a0298afcf8cfaf388b67282d5ec68547561ef13413d85c2f00d7171"
+    },
+    {
+      "byte_length": 2119,
+      "class": "io.github.mzmine.util.MemoryMapStorage",
+      "relative_path": "io/github/mzmine/util/MemoryMapStorage.java",
+      "root_id": "boundary-adapters",
+      "sha256": "18e58e11ae54a31ac1de64e1210b3a30fd447a8e86843173ecbdae6aff741cff"
+    }
+  ],
+  "content_sha256": "1f3fa33550bfd1742c1af0b809ebb700794979553489d6278731f43cfdfb2e43",
+  "schema_version": 1
+}
