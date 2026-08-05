@@ -88,8 +88,8 @@ jobs:
       - name: Record exact checked-out adapter hashes
         run: >-
           python scripts/inventory_v408_adapters.py
-          --root oracle/v408-executable/adapters/src/main/java
-          --root oracle/v408-boundaries/src/main/java
+          --root executable-adapters=oracle/v408-executable/adapters/src/main/java
+          --root boundary-adapters=oracle/v408-boundaries/src/main/java
           --expected-count 12
           --output "${ADAPTER_INVENTORY}"
 
