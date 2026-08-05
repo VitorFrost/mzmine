@@ -2,10 +2,20 @@ name: Public parity stage report
 
 on:
   workflow_dispatch:
+    inputs:
+      source_ms_level:
+        description: "MS level to use as the source-data stream. This is a manual label, not an automatic inference."
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
   push:
     branches:
       - "open-offline-main"
       - "agent/public-parity-report-*"
+      - "agent/manual-source-ms-level"
     paths:
       - ".github/workflows/public_parity_stage_report.yml"
       - "datasets/public_validation_manifest.json"
@@ -15,6 +25,7 @@ on:
       - "scripts/compare_mzmine_stage_reports.py"
       - "src/main/java/io/github/mzmine/util/parity/**"
       - "src/test/java/MZmineDifferentialReportAcceptanceTest.java"
+      - "src/test/java/MZmineDifferentialSourceLevelTest.java"
       - "src/test/java/io/github/mzmine/util/parity/**"
   pull_request:
     branches:
@@ -28,6 +39,7 @@ on:
       - "scripts/compare_mzmine_stage_reports.py"
       - "src/main/java/io/github/mzmine/util/parity/**"
       - "src/test/java/MZmineDifferentialReportAcceptanceTest.java"
+      - "src/test/java/MZmineDifferentialSourceLevelTest.java"
       - "src/test/java/io/github/mzmine/util/parity/**"
 
 permissions:
@@ -47,7 +59,7 @@ jobs:
       DATA_ROOT: build/public_validation_data
       INPUT_FILE: build/public_validation_data/zenodo/14001110/Banane_30ngmL_001.mzML
       REPORT_FILE: parity-artifacts/open-offline-import-mass-detection.json
-      SURVEY_MS_LEVEL: "1"
+      SOURCE_MS_LEVEL: ${{ inputs.source_ms_level || '1' }}
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       SOURCE_REF: ${{ github.head_ref || github.ref_name }}
 
@@ -85,7 +97,8 @@ jobs:
             echo "source_ref=${SOURCE_REF}"
             echo "source_sha=${SOURCE_SHA}"
             echo "actual_sha=${actual_sha}"
-            echo "survey_ms_level=${SURVEY_MS_LEVEL}"
+            echo "source_ms_level=${SOURCE_MS_LEVEL}"
+            echo "source_level_selection=manual"
             echo "runner_os=${RUNNER_OS}"
             echo "java_home=${JAVA_HOME}"
             python --version
@@ -118,7 +131,7 @@ jobs:
           --producer-commit "${SOURCE_SHA}"
           --application-version "3.9.1"
           --threads 1
-          --survey-ms-level "${SURVEY_MS_LEVEL}"
+          --source-ms-level "${SOURCE_MS_LEVEL}"
 
       - name: Summarize report
         shell: bash
