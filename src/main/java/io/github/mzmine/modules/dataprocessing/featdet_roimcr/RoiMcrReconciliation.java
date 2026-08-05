@@ -12,6 +12,7 @@ import java.util.List;
 final class RoiMcrReconciliation {
 
   private static final double EPS = 1e-12;
+  private static final double PROBABILITY_EPS = 1e-9;
 
   private RoiMcrReconciliation() {
   }
@@ -22,13 +23,15 @@ final class RoiMcrReconciliation {
                    double originalExplained) {
 
     Candidate {
+      perturbationStability = probability("perturbationStability", perturbationStability);
+      perturbationSupport = probability("perturbationSupport", perturbationSupport);
+      restartStability = probability("restartStability", restartStability);
+      originalExplained = probability("originalExplained", originalExplained);
       if (windowId < 1 || componentId < 1 || startScan < 0 || endScan < startScan
-          || apexScan < startScan || apexScan > endScan || signature == null
-          || perturbationStability < 0 || perturbationStability > 1
-          || perturbationSupport < 0 || perturbationSupport > 1
-          || restartStability < 0 || restartStability > 1
-          || originalExplained < 0 || originalExplained > 1) {
-        throw new IllegalArgumentException("Invalid ROI-MCR reconciliation candidate");
+          || apexScan < startScan || apexScan > endScan || signature == null) {
+        throw new IllegalArgumentException("Invalid ROI-MCR reconciliation candidate geometry: "
+            + "window=" + windowId + ", component=" + componentId + ", start=" + startScan
+            + ", end=" + endScan + ", apex=" + apexScan + ", signature=" + signature);
       }
     }
 
@@ -42,9 +45,10 @@ final class RoiMcrReconciliation {
                double minimumRepresentativeSimilarity) {
 
     Group {
+      minimumRepresentativeSimilarity = probability("minimumRepresentativeSimilarity",
+          minimumRepresentativeSimilarity);
       members = List.copyOf(members);
-      if (id < 1 || representative == null || members.isEmpty()
-          || minimumRepresentativeSimilarity < 0 || minimumRepresentativeSimilarity > 1) {
+      if (id < 1 || representative == null || members.isEmpty()) {
         throw new IllegalArgumentException("Invalid ROI-MCR reconciliation group");
       }
     }
@@ -151,7 +155,7 @@ final class RoiMcrReconciliation {
     final double apexAgreement = maximumApexDistanceScans == 0
         ? (apexDistance == 0 ? 1 : 0)
         : Math.max(0, 1 - apexDistance / (double) maximumApexDistanceScans);
-    return Math.max(0, Math.min(1, 0.45 * temporal + 0.45 * spectral + 0.10 * apexAgreement));
+    return clamp01(0.45 * temporal + 0.45 * spectral + 0.10 * apexAgreement);
   }
 
   private static double globalTemporalCosine(Candidate first, Candidate second) {
@@ -167,7 +171,7 @@ final class RoiMcrReconciliation {
       firstNorm += firstValue * firstValue;
       secondNorm += secondValue * secondValue;
     }
-    return dot / Math.sqrt(Math.max(firstNorm * secondNorm, EPS));
+    return clamp01(dot / Math.sqrt(Math.max(firstNorm * secondNorm, EPS)));
   }
 
   private static double profileAt(Candidate candidate, int globalScan) {
@@ -224,7 +228,18 @@ final class RoiMcrReconciliation {
     for (double loading : second.loadings()) {
       secondNorm += loading * loading;
     }
-    return dot / Math.sqrt(Math.max(firstNorm * secondNorm, EPS));
+    return clamp01(dot / Math.sqrt(Math.max(firstNorm * secondNorm, EPS)));
+  }
+
+  private static double probability(String name, double value) {
+    if (!Double.isFinite(value) || value < -PROBABILITY_EPS || value > 1 + PROBABILITY_EPS) {
+      throw new IllegalArgumentException("Invalid ROI-MCR probability " + name + "=" + value);
+    }
+    return clamp01(value);
+  }
+
+  private static double clamp01(double value) {
+    return Math.max(0, Math.min(1, value));
   }
 
   private static boolean overlaps(int firstStart, int firstEnd, int secondStart, int secondEnd) {
