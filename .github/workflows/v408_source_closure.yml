@@ -9,6 +9,7 @@ on:
     paths:
       - ".github/workflows/v408_source_closure.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
+      - "oracle/v408-boundaries/**"
       - "scripts/audit_v408_source_closure.py"
       - "scripts/tests/test_audit_v408*.py"
   pull_request:
@@ -17,6 +18,7 @@ on:
     paths:
       - ".github/workflows/v408_source_closure.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
+      - "oracle/v408-boundaries/**"
       - "scripts/audit_v408_source_closure.py"
       - "scripts/tests/test_audit_v408*.py"
 
@@ -36,6 +38,8 @@ jobs:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
       REPORT_PATH: parity-artifacts/v408-source-closure.json
+      BOUNDARY_SOURCE: oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
+      MOUNTED_BOUNDARY_SOURCE: build/oracle/mzmine-v4.0.8/open-offline-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java
 
     steps:
       - name: Check out open-offline harness
@@ -78,14 +82,27 @@ jobs:
           test "${actual}" = "${ORACLE_COMMIT}"
           test -f "${ORACLE_PATH}/LICENSE.txt"
           test -f "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+          test -f "${BOUNDARY_SOURCE}"
           {
             echo "oracle_repository=mzmine/mzmine"
             echo "oracle_tag=v4.0.8"
             echo "oracle_commit=${ORACLE_COMMIT}"
             echo "actual_commit=${actual}"
+            echo "boundary_source_origin=${BOUNDARY_SOURCE}"
+            echo "boundary_policy=null-only type identity; no unavailable behavior reconstructed"
             sha256sum "${ORACLE_PATH}/LICENSE.txt"
             sha256sum "${ORACLE_PATH}/mzmine-community/LICENSE.txt"
+            sha256sum "${BOUNDARY_SOURCE}"
           } > parity-artifacts/v408-source-closure-metadata.txt
+
+      - name: Mount reviewed boundary source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "${MOUNTED_BOUNDARY_SOURCE}")"
+          cp "${BOUNDARY_SOURCE}" "${MOUNTED_BOUNDARY_SOURCE}"
+          cmp --silent "${BOUNDARY_SOURCE}" "${MOUNTED_BOUNDARY_SOURCE}"
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
 
       - name: Generate fail-closed source closure report
         run: >-
