@@ -45,6 +45,28 @@ include intermediate scientific outputs where practical.
 
 ## Current verified baseline
 
+### Governed v4.0.8 import and centroid differential
+
+The fork now has direct behavioral evidence against the exact public v4.0.8 commit for both
+explicitly selected source-data paths:
+
+- all 5,221 scans and 6,477,349 imported spectral points compared record by record;
+- 4,081 MS1 records and 6,450,546 MS1 centroid points compared;
+- 1,140 MS2 records and 26,803 MS2 centroid points compared;
+- scan order, membership, MS level, polarity, spectrum type, point count, m/z, intensity, sampled
+  points, and precursor/isolation/charge metadata equivalent;
+- strict reports retain the deterministic binary32 retention-time representation differences;
+- governed reports contain zero differences under a frozen RT-only binary32 tolerance contract;
+- m/z and intensity tolerances were not relaxed;
+- Linux, Windows, headless startup, deterministic batch, independence, and untouched-3.9 gates pass.
+
+Manual workflow dispatch runs only the MS1 or MS2 level selected by the user. Push and pull-request
+CI use two explicit jobs to validate both user-selectable paths. No manufacturer or acquisition-mode
+inference is performed.
+
+Complete evidence, hashes, failure history, and scope limits are recorded in
+`docs/public_validation/V408_IMPORT_MASS_DETECTION_PARITY.md`.
+
 ### Scientific baseline
 
 The fork has deterministic tests for:
@@ -91,7 +113,8 @@ The validated blank + technical-replicate run produced on both Ubuntu and Window
 - byte-identical 22,422-byte CSV;
 - SHA-256 `139a02d3305280937783acc1ac730fbb4c719c4e80730c2bf864f68806e89c11`.
 
-This establishes robust public 3.x workflow compatibility. It is not direct 4.0.8 parity evidence.
+This establishes robust public 3.x workflow compatibility. It is not direct 4.0.8 parity evidence for
+the downstream feature-processing stages.
 
 ### Task infrastructure
 
@@ -119,12 +142,12 @@ scheduler and defines its own grouped-task API rather than claiming upstream bin
 | Tasks | Scheduler independent of JavaFX/Desktop | Adapted | Source-boundary and headless error tests | GUI-boundary regression and release packaging test |
 | Tasks | Grouped scientific task | Adapted | Original fork-local deterministic implementation | Adopt only in modules that demonstrate need |
 | Memory | Memory-map lifecycle | Not implemented | 3.9 baseline present | Close/delete/recovery/load tests on Linux and Windows |
-| Import | Current indexed centroid mzML fixtures | Adapted | Synthetic and three real negative files | Differential import summary against v4.0.8 |
-| Import | Broader mzML conformance | Not implemented | Current fixtures are centroided/negative | Profile, positive, mixed polarity, encodings, units, malformed metadata |
-| Import | MS1/MS2 metadata counts | Adapted | Scan levels and ranges asserted | Precursor/isolation/charge/collision-energy differential tests |
+| Import | Governed indexed centroid mzML | Equivalent | Direct v4.0.8 differential: 5,221 scans and 6,477,349 points; governed zero differences | Extend to broader mzML encodings and files |
+| Import | Broader mzML conformance | Not implemented | Current governed file is indexed, centroided, negative LC-MS | Profile, positive, mixed polarity, encodings, units, malformed metadata |
+| Import | Explicit MS1/MS2 metadata and source selection | Equivalent | Direct MS1/MS2 comparison including precursor/isolation/charge metadata | Extend metadata coverage with additional public files and MSn cases |
 | Import | Waters through reproducible mzML conversion | Not implemented | Candidate corpus documented | Freeze converter, command, input/output hashes and metadata |
 | Import | Native Waters RAW | Out of current scope | Explicitly deferred | Separate legal/technical milestone if independently distributable |
-| Processing | Centroid mass detection | Adapted | Synthetic and public workflow execution | Per-scan mass-list differential statistics |
+| Processing | Centroid mass detection at noise 0.0 | Equivalent | Direct per-scan MS1 and MS2 v4.0.8 comparison; governed zero differences | Add other noise levels and detector modes where in scope |
 | Processing | ADAP chromatogram building | Adapted | Deterministic feature counts in current workflows | Feature-level differential comparison with v4.0.8 |
 | Processing | Smoothing | Adapted | Public workflow completes with frozen counts | Point-series and feature-level differential comparison |
 | Processing | Local-minimum resolver | Adapted | Synthetic and public real-data counts | Split boundaries, areas, heights, points, and MS2 pairing comparison |
@@ -136,7 +159,7 @@ scheduler and defines its own grouped-task API rather than claiming upstream bin
 | Processing | Correlation grouping | Not implemented as scientific evidence | Step completes but minimal fixture yields no useful groups | Multi-replicate corpus with known reproducible correlations |
 | Processing | Blank classification | Not implemented | Published rows filter recorded only | Separate analytical blank ratios/categories and clear boundary from parity |
 | Processing | Adduct/ion identity | Not implemented | Source may exist in 3.9 but no parity suite | Public workflow, parameter map, and deterministic relationships |
-| MS2 | Feature-to-MS2 association | Not implemented | MS2 scan counts only | Association, precursor, RT, isolation, multiple spectra, orphan handling |
+| MS2 | Feature-to-MS2 association | Not implemented | Raw MS2 scan/precursor import is equivalent | Association, RT, multiple spectra, and orphan handling |
 | MS2 | MSe processing | Not implemented | Official reference identified | Freeze and execute public MSe workflow |
 | Annotation | Spectral-library import | Not implemented as parity evidence | 3.9 source present | Public MSP/MGF/JSON fixtures and round-trip assertions |
 | Annotation | Spectral-library matching | Not implemented | No direct public matching benchmark | Score, tolerances, filters, ranking, and top-N comparison |
@@ -149,7 +172,8 @@ scheduler and defines its own grouped-task API rather than claiming upstream bin
 
 ## Differential 4.0.8 oracle
 
-The next parity work must compare the fork directly with the public v4.0.8 code line.
+The direct oracle harness now validates import and centroid behavior. The next parity work extends the
+same design to chromatogram construction and feature detection.
 
 ### Required execution design
 
@@ -202,9 +226,13 @@ Create a machine-readable matrix containing:
 
 ### Gate 3 — differential workflow harness
 
-Execute at least two public LC-MS workflows against v4.0.8 and the fork. One must exercise the
-current untargeted blank/replicate path; the second must add meaningful MS2 or another currently
-uncovered core capability.
+The first differential stage is complete for mzML import and centroid mass detection, including
+explicit MS1 and MS2 paths. Continue Gate 3 with chromatogram construction and feature detection,
+then extend to the blank/replicate workflow.
+
+At least two public LC-MS workflows remain required before a 4.0-derived release version. One must
+exercise the current untargeted blank/replicate path; the second must add meaningful feature-to-MS2
+or another currently uncovered core capability.
 
 ### Gate 4 — mzML and MS2 conformance
 
