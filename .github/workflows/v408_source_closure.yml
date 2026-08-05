@@ -10,7 +10,7 @@ on:
       - ".github/workflows/v408_source_closure.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
       - "scripts/audit_v408_source_closure.py"
-      - "scripts/tests/test_audit_v408_source_closure.py"
+      - "scripts/tests/test_audit_v408*.py"
   pull_request:
     branches:
       - "open-offline-main"
@@ -18,7 +18,7 @@ on:
       - ".github/workflows/v408_source_closure.yml"
       - "datasets/parity/v408_source_closure_manifest.json"
       - "scripts/audit_v408_source_closure.py"
-      - "scripts/tests/test_audit_v408_source_closure.py"
+      - "scripts/tests/test_audit_v408*.py"
 
 permissions:
   contents: read
@@ -56,8 +56,10 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python -m unittest scripts.tests.test_audit_v408_source_closure -v \
-            2>&1 | tee parity-artifacts/source-closure-unit-tests.txt
+          python -m unittest discover \
+            -s scripts/tests \
+            -p "test_audit_v408*.py" \
+            -v 2>&1 | tee parity-artifacts/source-closure-unit-tests.txt
 
       - name: Check out exact public v4.0.8 oracle
         uses: actions/checkout@v4
