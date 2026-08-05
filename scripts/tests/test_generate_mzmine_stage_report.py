@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -108,6 +109,39 @@ class GenerateMZmineStageReportTest(unittest.TestCase):
       self.assertIn("Acceptance.generate", command)
       self.assertIn("--no-daemon", command)
       self.assertIn("--rerun-tasks", command)
+
+  def test_survey_ms_level_has_distinct_governed_mapping(self) -> None:
+    self.assertEqual(
+        "mzml-import-centroid-survey-ms1-v1",
+        GENERATOR.settings_mapping_id(1),
+    )
+    self.assertEqual(
+        "mzml-import-centroid-survey-ms2-v1",
+        GENERATOR.settings_mapping_id(2),
+    )
+    with self.assertRaisesRegex(GENERATOR.GenerationError, "exactly 1 or 2"):
+      GENERATOR.settings_mapping_id(3)
+
+  def test_environment_passes_single_selected_survey_level(self) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+      root = Path(directory)
+      args = argparse.Namespace(
+          input=root / "input.mzML",
+          output=root / "report.json",
+          producer_repository="VitorFrost/mzmine",
+          producer_ref="agent/test",
+          producer_commit="a" * 40,
+          application_version="3.9.1",
+          threads=1,
+          survey_ms_level=2,
+      )
+      dataset = {
+          "dataset_id": "dataset",
+          "relative_path": "dataset/input.mzML",
+      }
+      environment = GENERATOR.build_environment(args, dataset, "b" * 64)
+      self.assertEqual("2", environment["MZMINE_PARITY_SURVEY_MS_LEVEL"])
+      self.assertEqual("1", environment["MZMINE_PARITY_THREADS"])
 
 
 if __name__ == "__main__":

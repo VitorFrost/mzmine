@@ -4,6 +4,10 @@
 The command validates the selected public dataset record and local bytes before invoking the opt-in
 Java acceptance test. The produced JSON is then validated with the same independent contract used by
 the differential comparator.
+
+Exactly one survey scan level is processed per run. Level 1 is the default for conventional mzML;
+level 2 is available for vendor-converted single-quadrupole full scans represented as MS2. This
+selection must not be used to relabel true fragmented MS2 spectra as survey data.
 """
 
 from __future__ import annotations
@@ -124,6 +128,12 @@ def gradle_command(repository: Path, test_name: str) -> list[str]:
   ]
 
 
+def settings_mapping_id(survey_ms_level: int) -> str:
+  if survey_ms_level not in (1, 2):
+    raise GenerationError("survey MS level must be exactly 1 or 2")
+  return f"mzml-import-centroid-survey-ms{survey_ms_level}-v1"
+
+
 def build_environment(
     args: argparse.Namespace,
     dataset: dict[str, Any],
@@ -141,6 +151,7 @@ def build_environment(
       "MZMINE_PARITY_COMMIT": args.producer_commit,
       "MZMINE_PARITY_APPLICATION_VERSION": args.application_version,
       "MZMINE_PARITY_THREADS": str(args.threads),
+      "MZMINE_PARITY_SURVEY_MS_LEVEL": str(args.survey_ms_level),
   })
   return environment
 
@@ -161,6 +172,16 @@ def build_parser() -> argparse.ArgumentParser:
   parser.add_argument("--producer-commit", required=True)
   parser.add_argument("--application-version", default="3.9.1")
   parser.add_argument("--threads", type=int, default=1)
+  parser.add_argument(
+      "--survey-ms-level",
+      type=int,
+      choices=(1, 2),
+      default=1,
+      help=(
+          "Single scan level treated as the survey/full-scan stream. Use 2 only when the vendor "
+          "conversion represents a non-fragmented single-quadrupole full scan as MS2."
+      ),
+  )
   parser.add_argument("--test-name", default=DEFAULT_TEST)
   parser.add_argument(
       "--dry-run",
@@ -179,6 +200,7 @@ def main() -> int:
         character not in "0123456789abcdef" for character in args.producer_commit
     ):
       raise GenerationError("--producer-commit must be a lowercase 40-character SHA")
+    expected_mapping_id = settings_mapping_id(args.survey_ms_level)
     dataset = _dataset(_load_json(args.manifest), args.dataset_id)
     _, input_sha = validate_input(args.input, dataset)
     command = gradle_command(args.repository.resolve(), args.test_name)
@@ -196,6 +218,8 @@ def main() -> int:
       "producer_commit": args.producer_commit,
       "producer_ref": args.producer_ref,
       "relative_path": dataset["relative_path"],
+      "settings_mapping_id": expected_mapping_id,
+      "survey_ms_level": args.survey_ms_level,
   }, indent=2, sort_keys=True))
   if args.dry_run:
     return 0
@@ -232,6 +256,9 @@ def main() -> int:
     return 2
   if report["producer"]["commit"] != args.producer_commit:
     print("Generated report contains the wrong producer commit", file=sys.stderr)
+    return 2
+  if report["settings"]["mapping_id"] != expected_mapping_id:
+    print("Generated report contains the wrong survey MS-level mapping", file=sys.stderr)
     return 2
 
   print(f"Validated differential stage report: {args.output}")

@@ -31,6 +31,8 @@ import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector;
+import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters;
+import io.github.mzmine.modules.impl.MZmineProcessingStepImpl;
 import io.github.mzmine.modules.io.import_rawdata_all.AllSpectralDataImportModule;
 import io.github.mzmine.modules.io.import_rawdata_all.AllSpectralDataImportParameters;
 import io.github.mzmine.modules.io.import_spectral_library.SpectralLibraryImportParameters;
@@ -58,7 +60,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Opt-in real-data acceptance test for the normalized import and MS1 centroid mass-detection report.
+ * Opt-in real-data acceptance test for the normalized import and selected survey-scan centroid
+ * mass-detection report.
+ *
+ * <p>The selected survey level is explicit and limited to one level per execution. This supports
+ * vendor-converted single-quadrupole full scans represented as either MS1 or MS2 without silently
+ * mixing true fragment spectra into the same evidence report.</p>
  *
  * <p>The ordinary test suite skips this test unless all required environment variables are present.
  * This preserves the repository's no-large-data policy while providing one reproducible executable
@@ -70,11 +77,7 @@ class MZmineDifferentialReportAcceptanceTest {
       "zenodo-14001110-banane-30ngml-001";
   private static final String DEFAULT_RELATIVE_PATH =
       "zenodo/14001110/Banane_30ngmL_001.mzML";
-  private static final String SETTINGS_MAPPING_ID = "mzml-import-centroid-ms1-v1";
-  private static final String SETTINGS_CANONICAL_JSON =
-      "{\"advanced_import\":false,\"denormalize_fragment_scans\":false,"
-          + "\"mass_detector\":\"Centroid mass detector\",\"ms_level\":1,"
-          + "\"netcdf_output\":false,\"spectral_library_import\":false}";
+  private static final double CENTROID_NOISE_LEVEL = 0d;
 
   @AfterEach
   void cleanProject() {
@@ -99,6 +102,7 @@ class MZmineDifferentialReportAcceptanceTest {
     Assumptions.assumeTrue(commit != null && !commit.isBlank(),
         "MZMINE_PARITY_COMMIT is not configured");
 
+    int surveyMsLevel = parseSurveyMsLevel(environment.get("MZMINE_PARITY_SURVEY_MS_LEVEL"));
     Path input = Path.of(inputValue).toAbsolutePath().normalize();
     Path output = Path.of(outputValue).toAbsolutePath().normalize();
     assertTrue(Files.isRegularFile(input), "Configured parity input must be a regular file");
@@ -120,11 +124,15 @@ class MZmineDifferentialReportAcceptanceTest {
     RawDataFile rawDataFile = rawFiles.get(0);
     assertTrue(rawDataFile.getNumOfScans() > 0, "Imported raw data file has no scans");
 
-    runCentroidMassDetection(rawDataFile);
-    long ms1Scans = rawDataFile.getScans().stream().filter(scan -> scan.getMSLevel() == 1).count();
-    long ms1MassLists = rawDataFile.getScans().stream()
-        .filter(scan -> scan.getMSLevel() == 1 && scan.getMassList() != null).count();
-    assertEquals(ms1Scans, ms1MassLists, "Every selected MS1 scan must receive a mass list");
+    runCentroidMassDetection(rawDataFile, surveyMsLevel);
+    long selectedScans = rawDataFile.getScans().stream()
+        .filter(scan -> scan.getMSLevel() == surveyMsLevel).count();
+    long selectedMassLists = rawDataFile.getScans().stream()
+        .filter(scan -> scan.getMSLevel() == surveyMsLevel && scan.getMassList() != null).count();
+    assertTrue(selectedScans > 0,
+        "No scans exist for the configured survey MS level " + surveyMsLevel);
+    assertEquals(selectedScans, selectedMassLists,
+        "Every selected survey scan must receive a mass list");
 
     int threadCount = parsePositiveInt(environment.get("MZMINE_PARITY_THREADS"), 1);
     ProducerMetadata producer = new ProducerMetadata(
@@ -142,7 +150,7 @@ class MZmineDifferentialReportAcceptanceTest {
         Files.size(input),
         actualSha);
     SettingsMetadata settingsMetadata = new SettingsMetadata(
-        SETTINGS_MAPPING_ID, sha256(SETTINGS_CANONICAL_JSON));
+        settingsMappingId(surveyMsLevel), sha256(settingsCanonicalJson(surveyMsLevel)));
 
     DifferentialStageReportWriter.write(
         output, producer, inputMetadata, settingsMetadata, rawDataFile);
@@ -151,6 +159,7 @@ class MZmineDifferentialReportAcceptanceTest {
     assertTrue(report.contains("\"schema_version\":1"));
     assertTrue(report.contains("\"mass_detection\""));
     assertTrue(report.contains(actualSha));
+    assertTrue(report.contains(settingsMappingId(surveyMsLevel)));
   }
 
   private static void importMzml(Path input) throws InterruptedException {
@@ -167,13 +176,20 @@ class MZmineDifferentialReportAcceptanceTest {
         "mzML import did not finish successfully");
   }
 
-  private static void runCentroidMassDetection(RawDataFile rawDataFile)
+  private static void runCentroidMassDetection(RawDataFile rawDataFile, int surveyMsLevel)
       throws InterruptedException {
     ParameterSet parameters = MZmineCore.getConfiguration()
         .getModuleParameters(MassDetectionModule.class).cloneParameterSet();
+    ParameterSet centroidParameters = new CentroidMassDetectorParameters();
+    centroidParameters.setParameter(CentroidMassDetectorParameters.noiseLevel,
+        CENTROID_NOISE_LEVEL);
+    centroidParameters.setParameter(CentroidMassDetectorParameters.detectIsotopes, false);
+    parameters.setParameter(MassDetectionParameters.massDetector,
+        new MZmineProcessingStepImpl<>(new CentroidMassDetector(), centroidParameters));
     parameters.setParameter(MassDetectionParameters.dataFiles,
         new RawDataFilesSelection(new RawDataFile[]{rawDataFile}));
-    parameters.setParameter(MassDetectionParameters.scanSelection, new ScanSelection(1));
+    parameters.setParameter(MassDetectionParameters.scanSelection,
+        new ScanSelection(surveyMsLevel));
     parameters.setParameter(MassDetectionParameters.denormalizeMSnScans, false);
     parameters.setParameter(MassDetectionParameters.outFilenameOption, false);
 
@@ -183,7 +199,28 @@ class MZmineDifferentialReportAcceptanceTest {
     assertEquals(TaskResult.FINISHED,
         MZmineTestUtil.callModuleWithTimeout(
             10, MINUTES, MassDetectionModule.class, parameters),
-        "MS1 centroid mass detection did not finish successfully");
+        "MS" + surveyMsLevel + " survey centroid mass detection did not finish successfully");
+  }
+
+  static int parseSurveyMsLevel(String value) {
+    int parsed = parsePositiveInt(value, 1);
+    if (parsed != 1 && parsed != 2) {
+      throw new IllegalArgumentException(
+          "MZMINE_PARITY_SURVEY_MS_LEVEL must be exactly 1 or 2");
+    }
+    return parsed;
+  }
+
+  static String settingsMappingId(int surveyMsLevel) {
+    return "mzml-import-centroid-survey-ms" + surveyMsLevel + "-v1";
+  }
+
+  static String settingsCanonicalJson(int surveyMsLevel) {
+    return "{\"advanced_import\":false,\"denormalize_fragment_scans\":false,"
+        + "\"detect_isotopes_below_noise\":false,"
+        + "\"mass_detector\":\"Centroid mass detector\",\"noise_level\":0.0,"
+        + "\"netcdf_output\":false,\"spectral_library_import\":false,"
+        + "\"survey_ms_level\":" + surveyMsLevel + "}";
   }
 
   private static int parsePositiveInt(String value, int defaultValue) {
