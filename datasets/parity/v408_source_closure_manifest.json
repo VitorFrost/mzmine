@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v2",
+  "audit_id": "mzmine-v4.0.8-lcms-parser-centroid-source-closure-v3",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -42,11 +42,64 @@
   "reviewed_boundaries": {
     "io.github.mzmine.taskcontrol.AbstractTask": {
       "classification": "task-lifecycle-boundary",
-      "reason": "The oracle calls parseMzMl directly. Cancellation, scheduling, status propagation, and application task services are outside the scientific parser result and use an independently defined minimal lifecycle adapter."
+      "reason": "The oracle calls parseMzMl directly. Cancellation, scheduling, status propagation, and application task services are outside the scientific parser result and use an independently defined minimal lifecycle adapter.",
+      "preserved_members": [
+        "module call timestamp storage",
+        "cancellation flag queried by the parser"
+      ]
+    },
+    "io.github.mzmine.util.MemoryMapStorage": {
+      "classification": "unavailable-storage-boundary",
+      "reason": "This type is referenced by public source but is absent from the frozen public source tree. The parser accepts null storage and the oracle uses that public path; no closed implementation is reconstructed.",
+      "source_expected": false,
+      "preserved_members": [
+        "nullable constructor argument only"
+      ]
+    },
+    "io.github.mzmine.modules.io.import_rawdata_all.spectral_processor.ScanImportProcessorConfig": {
+      "classification": "import-configuration-boundary",
+      "reason": "The oracle uses an independently defined no-filter, no-advanced-processing configuration. Manufacturer inference and GUI/batch configuration are excluded while the selected source MS level remains an explicit user setting outside the parser.",
+      "preserved_members": [
+        "scanFilter",
+        "processor",
+        "isMassDetectActive"
+      ]
+    },
+    "io.github.mzmine.datamodel.RawDataFile": {
+      "classification": "unused-conversion-api-boundary",
+      "reason": "BuildingMzMLMsScan exposes conversion methods accepting RawDataFile, but the oracle normalizes BuildingMzMLMsScan values directly and never constructs or registers an application RawDataFile.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.util.DataPointUtils": {
+      "classification": "array-helper-method-boundary",
+      "reason": "Only the array conversion helpers used by BuildingMzMLMsScan are retained. Feature conversion methods in the same utility class are unrelated and would pull the project feature model into the oracle.",
+      "preserved_members": [
+        "getDataPointsAsDoubleArray"
+      ]
+    },
+    "io.github.mzmine.datamodel.featuredata.impl.StorageUtils": {
+      "classification": "array-storage-method-boundary",
+      "reason": "Only public array/buffer conversion needed by parsed scan records is retained. Feature-series storage and memory-map lifecycle are outside the non-IMS parser oracle.",
+      "preserved_members": [
+        "storeValuesToDoubleBuffer"
+      ]
+    },
+    "io.github.mzmine.main.MZmineCore": {
+      "classification": "application-bootstrap-boundary",
+      "reason": "Scientific data enums reference MZmineCore for display formatting. The oracle records canonical enum names and does not execute application bootstrap, GUI, account, event, or cloud services.",
+      "preserved_members": []
+    },
+    "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector": {
+      "classification": "scientific-method-slice-boundary",
+      "reason": "The oracle preserves and executes the exact public primitive-array overload. Interface, GUI parameter, isotope-below-noise, and MassSpectrum overload dependencies are outside the explicit centroid noise-level comparison.",
+      "preserved_members": [
+        "getMassValues(double[], double[], double)"
+      ]
     },
     "io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters": {
       "classification": "parameter-ui-boundary",
-      "reason": "The oracle calls the exact public getMassValues(mzs, intensities, noiseLevel) overload. GUI-backed parameter formatting and setup dialogs are excluded; the explicit numeric noise level is recorded in the differential settings contract."
+      "reason": "GUI-backed parameter formatting and setup dialogs are excluded. The explicit numeric noise level is recorded in the differential settings contract.",
+      "preserved_members": []
     }
   },
   "expected_prohibited_prefixes": [
