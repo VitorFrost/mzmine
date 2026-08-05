@@ -200,6 +200,19 @@ jobs:
           --output-dir "${DATA_ROOT}"
           --verify-existing
 
+      - name: Verify physical execution paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "${GITHUB_WORKSPACE}/${INPUT_FILE}"
+          test "$(stat -c %s "${GITHUB_WORKSPACE}/${INPUT_FILE}")" = "${INPUT_SIZE}"
+          mkdir -p "$(dirname "${GITHUB_WORKSPACE}/${REPORT_FILE}")"
+          {
+            echo "input_physical_path=${GITHUB_WORKSPACE}/${INPUT_FILE}"
+            echo "output_physical_path=${GITHUB_WORKSPACE}/${REPORT_FILE}"
+            echo "input_portable_identity=${INPUT_RELATIVE_PATH}"
+          } > oracle/v408-executable/evidence/v408-execution-paths.txt
+
       - name: Record resolved public compile dependencies
         shell: bash
         run: |
@@ -219,7 +232,7 @@ jobs:
         run: |
           set -o pipefail
           gradle -p oracle/v408-executable run --no-daemon --stacktrace \
-            --args="--input ${INPUT_FILE} --output ${REPORT_FILE} --dataset-id ${DATASET_ID} --relative-path ${INPUT_RELATIVE_PATH} --expected-size ${INPUT_SIZE} --expected-sha256 ${INPUT_SHA256} --source-ms-level ${SOURCE_MS_LEVEL} --noise-level 0.0" \
+            --args="--input ${GITHUB_WORKSPACE}/${INPUT_FILE} --output ${GITHUB_WORKSPACE}/${REPORT_FILE} --dataset-id ${DATASET_ID} --relative-path ${INPUT_RELATIVE_PATH} --expected-size ${INPUT_SIZE} --expected-sha256 ${INPUT_SHA256} --source-ms-level ${SOURCE_MS_LEVEL} --noise-level 0.0" \
             2>&1 | tee oracle/v408-executable/evidence/v408-execution.log
 
       - name: Validate and summarize normalized report
