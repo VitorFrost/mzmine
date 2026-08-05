@@ -47,6 +47,7 @@ jobs:
       DATA_ROOT: build/public_validation_data
       INPUT_FILE: build/public_validation_data/zenodo/14001110/Banane_30ngmL_001.mzML
       REPORT_FILE: parity-artifacts/open-offline-import-mass-detection.json
+      SURVEY_MS_LEVEL: "1"
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       SOURCE_REF: ${{ github.head_ref || github.ref_name }}
 
@@ -84,6 +85,7 @@ jobs:
             echo "source_ref=${SOURCE_REF}"
             echo "source_sha=${SOURCE_SHA}"
             echo "actual_sha=${actual_sha}"
+            echo "survey_ms_level=${SURVEY_MS_LEVEL}"
             echo "runner_os=${RUNNER_OS}"
             echo "java_home=${JAVA_HOME}"
             python --version
@@ -116,6 +118,7 @@ jobs:
           --producer-commit "${SOURCE_SHA}"
           --application-version "3.9.1"
           --threads 1
+          --survey-ms-level "${SURVEY_MS_LEVEL}"
 
       - name: Summarize report
         shell: bash
@@ -133,6 +136,7 @@ jobs:
               "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
               "producer_commit": report["producer"]["commit"],
               "input_sha256": report["input"]["sha256"],
+              "settings_mapping_id": report["settings"]["mapping_id"],
               "settings_sha256": report["settings"]["sha256"],
               "import_record_count": len(stages["import"]["records"]),
               "import_total_point_count": stages["import"]["summary"]["total_point_count"],
