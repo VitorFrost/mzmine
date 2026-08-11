@@ -52,7 +52,7 @@ jobs:
           mkdir -p "$(dirname "${target}")"
           cp oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java "${target}"
 
-      - name: Run diagnostic dependency closure
+      - name: Run governed dependency closure
         id: closure
         shell: bash
         run: |
@@ -67,7 +67,7 @@ jobs:
           test -f "${REPORT}"
           exit 0
 
-      - name: Summarize closure without weakening it
+      - name: Summarize and enforce closure
         shell: bash
         run: |
           set -euo pipefail
@@ -76,16 +76,19 @@ jobs:
           from pathlib import Path
           p = Path("oracle/v408-executable/evidence/v408-adap-source-closure.json")
           report = json.loads(p.read_text(encoding="utf-8"))
-          print(json.dumps({
+          summary = {
               "status": report["status"],
               "summary": report["summary"],
               "violations": report["violations"],
               "reviewed_boundaries_reached": report["reviewed_boundaries_reached"],
-          }, indent=2, sort_keys=True))
+          }
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          if report["status"] != "pass" or report["violations"]:
+              raise SystemExit("ADAP source closure has unresolved or prohibited dependencies")
           PY
-          echo "audit_exit_code=${{ steps.closure.outputs.exit_code }}"
+          test "${{ steps.closure.outputs.exit_code }}" = "0"
 
-      - name: Upload diagnostic closure evidence
+      - name: Upload closure evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
