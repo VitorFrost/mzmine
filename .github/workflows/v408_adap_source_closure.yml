@@ -80,7 +80,7 @@ jobs:
               "status": report["status"],
               "summary": report["summary"],
               "violations": report["violations"],
-              "reviewed_boundaries": report["reviewed_boundaries"],
+              "reviewed_boundaries_reached": report["reviewed_boundaries_reached"],
           }, indent=2, sort_keys=True))
           PY
           echo "audit_exit_code=${{ steps.closure.outputs.exit_code }}"
