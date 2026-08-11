@@ -1,0 +1,95 @@
+name: MZmine v4.0.8 ADAP source closure
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-chromatogram-feature-parity"
+    paths:
+      - ".github/workflows/v408_adap_source_closure.yml"
+      - "datasets/parity/v408_adap_source_closure_manifest.json"
+      - "scripts/audit_v408_source_closure.py"
+      - "oracle/v408-boundaries/**"
+
+permissions:
+  contents: read
+
+jobs:
+  audit-adap-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      REPORT: oracle/v408-executable/evidence/v408-adap-source-closure.json
+    steps:
+      - name: Check out candidate harness
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out frozen public v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Mount reviewed null-storage type boundary for closure indexing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+          target="${ORACLE_PATH}/open-offline-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java"
+          mkdir -p "$(dirname "${target}")"
+          cp oracle/v408-boundaries/src/main/java/io/github/mzmine/util/MemoryMapStorage.java "${target}"
+
+      - name: Run diagnostic dependency closure
+        id: closure
+        shell: bash
+        run: |
+          set +e
+          python scripts/audit_v408_source_closure.py \
+            --checkout "${ORACLE_PATH}" \
+            --manifest datasets/parity/v408_adap_source_closure_manifest.json \
+            --output "${REPORT}" \
+            --require-commit
+          code=$?
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          test -f "${REPORT}"
+          exit 0
+
+      - name: Summarize closure without weakening it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("oracle/v408-executable/evidence/v408-adap-source-closure.json")
+          report = json.loads(p.read_text(encoding="utf-8"))
+          print(json.dumps({
+              "status": report["status"],
+              "summary": report["summary"],
+              "violations": report["violations"],
+              "reviewed_boundaries": report["reviewed_boundaries"],
+          }, indent=2, sort_keys=True))
+          PY
+          echo "audit_exit_code=${{ steps.closure.outputs.exit_code }}"
+
+      - name: Upload diagnostic closure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-adap-source-closure-${{ github.run_id }}
+          path: oracle/v408-executable/evidence/v408-adap-source-closure.json
+          if-no-files-found: error
+          retention-days: 30
