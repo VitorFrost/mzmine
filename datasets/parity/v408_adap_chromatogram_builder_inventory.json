@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "inventory_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-v1",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "source_prefix": "mzmine-community/src/main/java"
+  },
+  "candidate": {
+    "repository": "VitorFrost/mzmine",
+    "source_prefix": "src/main/java"
+  },
+  "package": "io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder",
+  "files": [
+    {
+      "name": "ADAPChromatogram.java",
+      "oracle_sha1": "d827bcf2e0e7c9dd5a36cc0ed75a65cee92f3952",
+      "candidate_sha1": "d827bcf2e0e7c9dd5a36cc0ed75a65cee92f3952",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "name": "ExpandedDataPoint.java",
+      "oracle_sha1": "2ec645dd90b678265f8e3044ed9e820a1f17142c",
+      "candidate_sha1": "2ec645dd90b678265f8e3044ed9e820a1f17142c",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "name": "ADAPChromatogramBuilderParameters.java",
+      "oracle_sha1": "1293e4d698a472eb3590ae3c4f4aa94cc8cef460",
+      "candidate_sha1": "6dd562fea83d932f97a527db5b2c3fbfc3f592b4",
+      "classification": "reviewed-ui-documentation-difference",
+      "governed_parameter_contract": {
+        "source_ms_level": 1,
+        "minimum_consecutive_scans": 5,
+        "minimum_intensity_for_consecutive_scans": 0.0,
+        "mz_tolerance_absolute": 0.002,
+        "mz_tolerance_ppm": 10.0,
+        "suffix": "chromatograms"
+      },
+      "note": "The parameter declarations and numeric defaults governing chromatogram construction match; v4.0.8 changes citation/setup-dialog presentation. Minimum absolute height has no safe numeric default and must be set explicitly by the future differential harness."
+    },
+    {
+      "name": "ModularADAPChromatogramBuilderModule.java",
+      "oracle_sha1": "b5753ce0fdc993fe476d41469048fbbe9f56909a",
+      "candidate_sha1": "f1782eafdaea381929bd80508760f690bd6ddfda",
+      "classification": "reviewed-display-name-difference",
+      "note": "The module execution path is otherwise unchanged in the frozen comparison; v4.0.8 renames the displayed module from ADAP Chromatogram Builder to Chromatogram builder."
+    },
+    {
+      "name": "ModularADAPChromatogramBuilderTask.java",
+      "oracle_sha1": "ab49a0a13fa1a29707c560f24f15d47fb55db6f0",
+      "candidate_sha1": "6783194f47c32221a358010e84061b9a8474d5d6",
+      "classification": "requires-direct-differential",
+      "known_reviewed_differences": [
+        "candidate sets FeatureShapeType to !isImaging while v4.0.8 only writes true for non-imaging rows",
+        "candidate uses FeatureListUtils.sortByDefaultRT while v4.0.8 uses FeatureListUtils.sortByDefault"
+      ],
+      "note": "Chromatogram seeding, m/z range assignment, continuous-point filtering, zero-edge insertion, and conversion to ModularFeature are unchanged in the audited task body. Output ordering remains a direct-differential question."
+    }
+  ]
+}
