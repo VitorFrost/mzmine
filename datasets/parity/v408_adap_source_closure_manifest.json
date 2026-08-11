@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v1",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "tag": "v4.0.8",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "license": "MIT"
+  },
+  "source_roots": [
+    "mzmine-community/src/main/java",
+    "utils/src/main/java",
+    "taskcontroller/src/main/java",
+    "javafx-framework/src/main/java",
+    "open-offline-boundaries/src/main/java"
+  ],
+  "entry_points": [
+    "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderTask",
+    "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ADAPChromatogram",
+    "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ExpandedDataPoint"
+  ],
+  "internal_prefixes": [
+    "io.github.mzmine."
+  ],
+  "prohibited_prefixes": [
+    "io.mzio."
+  ],
+  "reviewed_boundaries": {
+    "io.github.mzmine.main.MZmineCore": {
+      "classification": "application-bootstrap-boundary",
+      "reason": "The chromatogram differential must not initialize GUI, account, cloud, or application lifecycle services. Scientific settings and output normalization are supplied explicitly by the harness."
+    },
+    "io.github.mzmine.util.MemoryMapStorage": {
+      "classification": "storage-boundary-pending-runtime-design",
+      "reason": "The frozen public tree does not provide the fork's storage implementation. The closure test inventories the scientific dependency graph before a runtime storage strategy is reviewed; no storage behavior is reconstructed at this gate."
+    }
+  },
+  "policy": {
+    "follow_reviewed_boundaries": false,
+    "fail_on_missing_entry_point": true,
+    "fail_on_unresolved_internal_import": true,
+    "fail_on_unreviewed_prohibited_reference": true,
+    "require_at_least_one_reviewed_boundary": true,
+    "require_at_least_one_prohibited_reference_behind_boundary": false
+  }
+}
