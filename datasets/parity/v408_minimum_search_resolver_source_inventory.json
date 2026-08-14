@@ -84,7 +84,7 @@
     "legacy_feature_resolver_selected": false,
     "modern_resolver_required": "io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolver",
     "group_ms2_must_be_disabled_for_this_gate": true,
-    "pre_resolver_records_sha256": "fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2"
+    "pre_resolver_records_sha256": "1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971"
   },
   "policy": {
     "oracle_commit_must_match": true,
@@ -97,7 +97,7 @@
   },
   "direct_gate": {
     "status": "source-contract-frozen-direct-comparison-pending",
-    "upstream_state": "governed equivalent post-Savitzky-Golay smoothing state",
+    "upstream_state": "governed equivalent post-Savitzky-Golay smoothing state from datasets/parity/v408_smoothing_accepted_evidence.json",
     "published_settings_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c"
   }
 }
