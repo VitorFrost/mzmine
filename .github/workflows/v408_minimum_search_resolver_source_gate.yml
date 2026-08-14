@@ -1,0 +1,89 @@
+name: MZmine v4.0.8 minimum-search resolver source gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "open-offline-main"
+      - "agent/v408-minimum-search-resolver-differential"
+    paths:
+      - ".github/workflows/v408_minimum_search_resolver_source_gate.yml"
+      - "datasets/parity/v408_minimum_search_resolver_source_inventory.json"
+      - "scripts/audit_v408_minimum_search_resolver_source.py"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/**"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_minimum_search_resolver_source_gate.yml"
+      - "datasets/parity/v408_minimum_search_resolver_source_inventory.json"
+      - "scripts/audit_v408_minimum_search_resolver_source.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-minimum-search-source-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  audit-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      REPORT: build/minimum_search_parity/v408-minimum-search-source-audit.json
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out exact v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Audit resolver and generic feature-resolver source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_v408_minimum_search_resolver_source.py \
+            --fork-root . \
+            --oracle-root "${ORACLE_PATH}" \
+            --inventory datasets/parity/v408_minimum_search_resolver_source_inventory.json \
+            --output "${REPORT}"
+
+      - name: Enforce expected discovery result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("build/minimum_search_parity/v408-minimum-search-source-audit.json").read_text())
+          assert report["status"] == "PASS"
+          assert report["governed_file_count"] == 7
+          assert report["identical_file_count"] == 7
+          assert report["direct_differential_required"] is True
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload resolver source evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-minimum-search-source-${{ github.run_id }}
+          path: build/minimum_search_parity/v408-minimum-search-source-audit.json
+          if-no-files-found: warn
+          retention-days: 30
