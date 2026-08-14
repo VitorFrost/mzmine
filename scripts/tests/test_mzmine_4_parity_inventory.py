@@ -53,7 +53,7 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
     self.assertEqual("complete", report["oracle_execution_status"])
     self.assertEqual(12, report["module_count"])
     self.assertEqual(12, report["source_presence_verified_count"])
-    self.assertEqual(3, report["direct_differential_complete_count"])
+    self.assertEqual(4, report["direct_differential_complete_count"])
     self.assertEqual(2, report["dataset_group_count"])
     self.assertEqual(3, report["tolerance_profile_count"])
 
@@ -62,7 +62,7 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
         if module["classification"] == "Equivalent"
     }
     self.assertEqual(
-        {"mzml-import", "mass-detection", "adap-chromatogram-builder"},
+        {"mzml-import", "mass-detection", "adap-chromatogram-builder", "smoothing"},
         equivalent_modules,
     )
     for module_id in equivalent_modules:
@@ -70,11 +70,16 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
       self.assertTrue(module["evidence"]["direct_differential_complete"])
       self.assertEqual("complete", module["gate"]["status"])
 
+    smoothing = self.module_by_id(self.inventory, "smoothing")
+    self.assertEqual(1, smoothing["parameter_versions"]["oracle_408"])
+    self.assertEqual("verified", smoothing["parameter_mapping_status"])
+    self.assertIn("governed-differential-complete", smoothing["findings"])
+
   def test_equivalent_requires_direct_differential_evidence(self) -> None:
     inventory = copy.deepcopy(self.inventory)
-    smoothing = self.module_by_id(inventory, "smoothing")
-    self.assertFalse(smoothing["evidence"]["direct_differential_complete"])
-    smoothing["classification"] = "Equivalent"
+    resolver = self.module_by_id(inventory, "minimum-search-resolver")
+    self.assertFalse(resolver["evidence"]["direct_differential_complete"])
+    resolver["classification"] = "Equivalent"
     with self.assertRaisesRegex(
         VALIDATOR.ValidationError, "cannot be Equivalent"
     ):
