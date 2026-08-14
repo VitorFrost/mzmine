@@ -70,7 +70,7 @@ allocated it in the meantime**.
 | F-029 | ADAP final feature-list ordering/renumbering differs between 3.9-line candidate and v4.0.8 task | Observed/source-classified; row identity/order must remain visible in the direct differential and must not be normalized away |
 | F-030 | Global failure-index placeholder was accidentally created directly on `open-offline-main` | **Validated as corrected**: original placeholder commit `85be47cdbab026422639683ff1ad8165a6d2a1c3`; correction `4b936b95e6eb4584343e879b73a9ea28db6b32a2` replaced it in place after the failure/proposal record |
 | F-031 | Accidental `docs/development/NOOP` file created while attempting branch-based follow-up work | **Validated as corrected**: original commit `3ef791d8769bff662a120390b3190d6fccad11ad`; cleanup commit `89f1d36f118998fd10b7d8918e1c08a770ddb723` removed only the accidental file after the failure/proposal record |
-| F-032 | Full-size ADAP direct differential exhausts the test-worker heap | Active validation. Historical ADAP branch alias was `F-026`, which collides with canonical F-026. Candidate snapshot/release and heap increase `3g -> 5g` are execution-only proposals/changes; parity remains unaccepted until the dedicated probe completes and strict scientific differences are inspected |
+| F-032 | Full-size ADAP direct differential exhausts/fails under the current test-worker memory envelope | **Unresolved.** Historical ADAP branch alias was `F-026`, which collides with canonical F-026. Releasing the candidate feature list before the frozen probe and increasing the worker heap from 3 GiB to 5 GiB did not make the governed differential complete: run `31811608229` still failed in the direct differential, the JUnit case was reported skipped, and no normalized differential report was produced. These are execution-only changes; parity remains unaccepted |
 
 ## Active ADAP note
 
@@ -88,10 +88,16 @@ The F-025 head `603332159e00cdd96afc3a2f5dadba13d7b53335` passed the general Ope
 CI, but dedicated ADAP task-probe run `31810440392` failed at `Execute direct ADAP differential on
 public LC-MS`. Head `bd4559bd53b583f0b0f1771a88a62979c0033c65` then ran with an explicit
 3 GiB worker heap and also failed at the direct differential in run `31810967773`, while all source,
-compile, input, settings, evidence-upload, and cleanup stages succeeded. The branch then released the
-candidate feature list before the frozen probe and raised the worker heap from 3 GiB to 5 GiB at
-`f3ad7f1a59c1feeb01d97bc2bf7ddad4dfc96e47`; that head's dedicated probe is the active validation
-for canonical F-032.
+compile, input, settings, evidence-upload, and cleanup stages succeeded.
+
+The branch then released the candidate feature list before the frozen probe and raised the worker heap
+from 3 GiB to 5 GiB at `f3ad7f1a59c1feeb01d97bc2bf7ddad4dfc96e47`. Dedicated run
+`31811608229` also failed at `Execute direct ADAP differential on public LC-MS`. The source-probe
+regression tests, exact upstream checkout/preparation, candidate/frozen-probe compilation, governed
+mzML download/hash verification, published-settings download/hash verification, second byte
+verification, evidence upload, generated-probe cleanup, and public-data cleanup all passed. The
+acceptance test did not produce a normalized differential report before failure. F-032 therefore
+remains unresolved; increasing heap alone is not accepted as a solution.
 
 This is **work in progress**, not integrated evidence. ADAP remains `Adapted` with
 `direct_differential_complete = false` until the strict/governed scientific comparison is accepted,
@@ -108,7 +114,7 @@ records were reassigned while retaining their original text/history:
 - the CI concurrency record is canonical `F-027`;
 - the issue #50 parameter-class record is canonical `F-028`;
 - the issue #50 ordering/renumbering record is canonical `F-029`;
-- the ADAP heap-exhaustion event historically called `F-026` on the parallel branch is canonical
+- the ADAP heap/execution event historically called `F-026` on the parallel branch is canonical
   `F-032`.
 
 F-030 and F-031 demonstrated a second governance lesson: even documentation-only operations must obey
