@@ -4,7 +4,7 @@
 
 `F-xxx` identifiers are repository-global. They are not local to an issue, pull request, workflow, or `agent/*` branch. This index is the canonical allocation table used to prevent parallel work from assigning the same identifier to unrelated failures.
 
-Detailed original evidence remains in the append-only failure records, issue #27, issue #50, or the relevant pull request/workflow artifacts. This index records identity and current resolution state; it does not replace those records.
+Detailed original evidence remains in the append-only failure records, issue #27, issue #50/#55, or the relevant pull request/workflow artifacts. This index records identity and current resolution state; it does not replace those records.
 
 ## Allocation rule
 
@@ -19,7 +19,7 @@ Before assigning a new identifier:
 
 If a collision is found later, preserve the original evidence, reassign the colliding record to the next unused canonical identifier, and record the alias/correction history.
 
-As of the 2026-08-14 ADAP parity integration, identifiers through **F-033** are allocated. The next candidate is **F-034**, only after a fresh repository-wide check confirms that no parallel work has allocated it.
+As of the 2026-08-14 smoothing parity work, identifiers through **F-034** are allocated. The next candidate is **F-035**, only after a fresh repository-wide check confirms that no parallel work has allocated it.
 
 ## Canonical allocation table
 
@@ -58,6 +58,7 @@ As of the 2026-08-14 ADAP parity integration, identifiers through **F-033** are 
 | F-031 | Accidental `docs/development/NOOP` file created directly on `open-offline-main` | **Validated as corrected** by commit `89f1d36f118998fd10b7d8918e1c08a770ddb723`; only the accidental file was removed |
 | F-032 | Superseded duplicate ADAP harness test introduced undeclared Python `jsonschema` dependency | **Resolved on superseded branch; not merged**. Test made dependency-neutral and duplicate PR #52 closed |
 | F-033 | Governed ADAP differential exhausted heap when candidate and v4.0.8 oracle ran sequentially in one JVM | **Validated as resolved** by independent candidate/oracle JVM producers; direct run `31812225494` completed with 517/517 exact normalized records and identical record SHA-256 |
+| F-034 | Smoothing source closure escaped into unrelated import/task-controller graph and hit unresolved `AllSpectralDataImportMainTask -> ThreadPoolTask` | **Open**. Run `31814946367` retained; correction must identify and bound the non-executed application/import path rather than adding importer/thread-pool behavior blindly |
 
 ## ADAP parity consequence
 
@@ -72,16 +73,10 @@ F-033 was a differential-harness lifecycle problem, not a scientific mismatch. T
 
 The same-JVM OOM remains relevant evidence for the later memory/lifecycle release gate; process isolation does not constitute a claim of equal memory efficiency.
 
+## Smoothing parity note
+
+F-034 is a source-closure/provenance failure, not evidence of a smoothing algorithm difference. The independent source inventory shows the governed smoothing task, parameter set, module, algorithm interface, Savitzky-Golay implementation/parameters, LOESS implementation/parameters, and zero-handling type are byte-identical between candidate and frozen v4.0.8. The closure must still be narrowed/reviewed before that source identity can support the direct differential.
+
 ## Governance lessons
 
-Parallel issue/branch work caused several historical ID collisions. The canonical reconciliations are retained rather than erased. In particular:
-
-- stale parity-policy tests are F-026;
-- CI concurrency is F-027;
-- ADAP parameter-class provenance is F-028;
-- the disproven ADAP ordering hypothesis is F-029;
-- the accidental direct-main documentation writes are F-030/F-031;
-- the superseded duplicate Python dependency failure is F-032;
-- the real ADAP same-JVM memory failure is F-033.
-
-Future work must consult this file and active branch/issue history before allocating F-034 or later IDs. A machine-enforced uniqueness gate remains recommended before the 4.0 release candidate.
+Parallel issue/branch work caused several historical ID collisions. The canonical reconciliations are retained rather than erased. Future work must consult this file and active branch/issue history before allocating F-035 or later IDs. A machine-enforced uniqueness gate remains recommended before the 4.0 release candidate.
