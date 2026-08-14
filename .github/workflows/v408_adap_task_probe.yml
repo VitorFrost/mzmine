@@ -150,6 +150,38 @@ jobs:
             --rerun-tasks --no-daemon --stacktrace \
             2>&1 | tee build/adap_parity/v408-adap-direct-differential.log
 
+      - name: Expose JUnit differential failure
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          def esc(value: str) -> str:
+              return value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+          files = sorted(Path('build/test-results/test').glob('TEST-*MZmineAdapChromatogramDifferentialAcceptanceTest*.xml'))
+          if not files:
+              print('::notice title=ADAP JUnit diagnostics::No acceptance-test XML was produced')
+          for path in files:
+              root = ET.parse(path).getroot()
+              print(f"::notice title=ADAP JUnit result::{esc(path.name)} tests={root.get('tests')} failures={root.get('failures')} errors={root.get('errors')} skipped={root.get('skipped')}")
+              for case in root.findall('.//testcase'):
+                  failure = case.find('failure')
+                  error = case.find('error')
+                  problem = failure if failure is not None else error
+                  if problem is None:
+                      continue
+                  message = problem.get('message') or problem.text or 'JUnit failure without message'
+                  text = (problem.text or '').strip()
+                  tail = '\n'.join(text.splitlines()[-20:]) if text else ''
+                  detail = f"{case.get('classname')}.{case.get('name')}: {message}"
+                  if tail:
+                      detail += f"\n{tail}"
+                  print(f"::error title=F-025 ADAP differential JUnit::{esc(detail)}")
+          PY
+
       - name: Summarize differential evidence
         if: always()
         shell: bash
@@ -161,6 +193,10 @@ jobs:
           import json
           import os
           from pathlib import Path
+
+          def esc(value: str) -> str:
+              return value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
           path = Path(os.environ["DIFFERENTIAL_REPORT"])
           report = json.loads(path.read_text(encoding="utf-8"))
           summary = {
@@ -177,7 +213,17 @@ jobs:
               "oracle_records_sha256": report.get("oracle_records_sha256"),
               "records_equal": report.get("records_equal"),
           }
+          compact = json.dumps(summary, sort_keys=True, separators=(',', ':'))
           print(json.dumps(summary, indent=2, sort_keys=True))
+          print(f"::notice title=ADAP differential evidence::{esc(compact)}")
+          if report.get("records_equal") is False:
+              mismatch = {
+                  "candidate_feature_count": report.get("candidate_feature_count"),
+                  "oracle_feature_count": report.get("oracle_feature_count"),
+                  "candidate_records_sha256": report.get("candidate_records_sha256"),
+                  "oracle_records_sha256": report.get("oracle_records_sha256"),
+              }
+              print(f"::error title=F-025 ADAP scientific mismatch::{esc(json.dumps(mismatch, sort_keys=True))}")
           step = os.environ.get("GITHUB_STEP_SUMMARY")
           if step:
               with Path(step).open("a", encoding="utf-8") as handle:
@@ -186,7 +232,7 @@ jobs:
                   handle.write("\n```\n")
           PY
           else
-            echo "No differential report was produced; inspect F-024/F-025 logs." >&2
+            echo "::notice title=ADAP differential evidence::No normalized differential report was produced before the test failed"
           fi
 
       - name: Inspect and remove generated probe
