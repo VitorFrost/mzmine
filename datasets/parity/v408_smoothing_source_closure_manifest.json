@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-smoothing-source-closure-v1",
+  "audit_id": "mzmine-v4.0.8-smoothing-source-closure-v2",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -38,6 +38,14 @@
     "io.github.mzmine.modules.io.projectload.ProjectLoadModule": {
       "classification": "project-load-application-boundary",
       "reason": "The governed run uses an in-memory project and never loads or replaces a project file."
+    },
+    "io.github.mzmine.modules.io.import_rawdata_all.AllSpectralDataImportModule": {
+      "classification": "documentation-only-import-boundary",
+      "reason": "ScanPointerMassList imports this type only to support a Javadoc link. The smoothing scientific path does not invoke the aggregate import module; governed input creation occurs before smoothing."
+    },
+    "io.github.mzmine.modules.io.import_rawdata_mzml.MSDKmzMLImportTask": {
+      "classification": "documentation-only-import-boundary",
+      "reason": "ScanPointerMassList imports this task only for a Javadoc link. The smoothing differential does not invoke mzML import through this boundary; input preparation is an upstream governed stage."
     },
     "io.github.mzmine.modules.visualization.featurelisttable_modular.FeatureTableFX": {
       "classification": "feature-table-ui-boundary",
