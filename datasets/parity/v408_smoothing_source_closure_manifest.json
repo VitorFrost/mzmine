@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "audit_id": "mzmine-v4.0.8-smoothing-source-closure-v1",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "tag": "v4.0.8",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "license": "MIT"
+  },
+  "source_roots": [
+    "mzmine-community/src/main/java",
+    "utils/src/main/java",
+    "taskcontroller/src/main/java",
+    "javafx-framework/src/main/java",
+    "open-offline-boundaries/src/main/java"
+  ],
+  "entry_points": [
+    "io.github.mzmine.modules.dataprocessing.featdet_smoothing.SmoothingTask",
+    "io.github.mzmine.modules.dataprocessing.featdet_smoothing.SmoothingAlgorithm",
+    "io.github.mzmine.modules.dataprocessing.featdet_smoothing.loess.LoessSmoothing",
+    "io.github.mzmine.modules.dataprocessing.featdet_smoothing.savitzkygolay.SavitzkyGolaySmoothing"
+  ],
+  "internal_prefixes": ["io.github.mzmine."],
+  "prohibited_prefixes": ["io.mzio."],
+  "reviewed_boundaries": {
+    "io.github.mzmine.main.MZmineCore": {
+      "classification": "application-bootstrap-boundary",
+      "reason": "The governed smoothing differential runs headlessly with an already initialized configuration and explicit published settings; unrelated application/account/cloud bootstrap is outside the scientific path."
+    },
+    "io.github.mzmine.gui.MZmineGUI": {
+      "classification": "headless-gui-activation-boundary",
+      "reason": "The governed smoothing run never activates GUI behavior."
+    },
+    "io.github.mzmine.gui.preferences.MZminePreferences": {
+      "classification": "global-ui-preferences-boundary",
+      "reason": "The smoothing settings are loaded from the governed XML and do not read or edit global UI preferences."
+    },
+    "io.github.mzmine.modules.io.projectload.ProjectLoadModule": {
+      "classification": "project-load-application-boundary",
+      "reason": "The governed run uses an in-memory project and never loads or replaces a project file."
+    },
+    "io.github.mzmine.modules.visualization.featurelisttable_modular.FeatureTableFX": {
+      "classification": "feature-table-ui-boundary",
+      "reason": "Feature-table presentation is outside the headless scientific smoothing path."
+    },
+    "io.github.mzmine.modules.visualization.chromatogram.ChromatogramVisualizerModule": {
+      "classification": "interactive-visualization-boundary",
+      "reason": "No interactive chromatogram visualization is invoked."
+    },
+    "io.github.mzmine.modules.visualization.chromatogram.TICVisualizerTab": {
+      "classification": "interactive-visualization-tab-boundary",
+      "reason": "No visualization tab is instantiated."
+    },
+    "io.github.mzmine.datamodel.data_access.BinningMobilogramDataAccess": {
+      "classification": "non-ims-overload-boundary",
+      "reason": "The first governed smoothing gate is explicitly non-imaging, non-IMS LC-MS."
+    },
+    "io.github.mzmine.util.MemoryMapStorage": {
+      "classification": "nullable-storage-boundary",
+      "reason": "The governed gate uses null in-memory storage; unavailable storage behavior is not reconstructed."
+    }
+  },
+  "policy": {
+    "follow_reviewed_boundaries": false,
+    "fail_on_missing_entry_point": true,
+    "fail_on_unresolved_internal_import": true,
+    "fail_on_unreviewed_prohibited_reference": true,
+    "require_at_least_one_reviewed_boundary": true,
+    "require_at_least_one_prohibited_reference_behind_boundary": false
+  }
+}
