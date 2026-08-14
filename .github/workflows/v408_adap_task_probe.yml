@@ -1,0 +1,93 @@
+name: MZmine v4.0.8 ADAP task probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-chromatogram-feature-parity"
+    paths:
+      - ".github/workflows/v408_adap_task_probe.yml"
+      - "scripts/prepare_v408_adap_task_probe.py"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
+      - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
+
+permissions:
+  contents: read
+
+jobs:
+  compile-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      PROBE_SOURCE: src/test/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/V408ModularADAPChromatogramBuilderTaskProbe.java
+      PROBE_EVIDENCE: build/adap_parity/v408-adap-task-probe-preparation.json
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java 20
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Check out frozen public v4.0.8 source
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact upstream commit and prepare probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+          rm -f "${PROBE_SOURCE}"
+          python scripts/prepare_v408_adap_task_probe.py \
+            --checkout "${ORACLE_PATH}" \
+            --output "${PROBE_SOURCE}" \
+            --evidence "${PROBE_EVIDENCE}"
+          test -s "${PROBE_SOURCE}"
+          test -s "${PROBE_EVIDENCE}"
+
+      - name: Compile candidate and frozen task probe together
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew compileTestJava --no-daemon --stacktrace 2>&1 | tee build/adap_parity/v408-adap-task-probe-compile.log
+
+      - name: Reject accidental committed generated probe
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short -- "${PROBE_SOURCE}" | tee build/adap_parity/v408-adap-generated-status.txt
+          test "$(git status --short -- "${PROBE_SOURCE}" | wc -l)" -eq 1
+          test "$(git status --short -- "${PROBE_SOURCE}" | cut -c1-2)" = "??"
+          rm -f "${PROBE_SOURCE}"
+
+      - name: Upload probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-adap-task-probe-${{ github.run_id }}
+          path: |
+            build/adap_parity/
+          if-no-files-found: warn
+          retention-days: 30
