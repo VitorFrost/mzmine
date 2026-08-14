@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "evidence_id": "mzmine-v4.0.8-feature-smoothing-direct-differential-31814860815",
+  "source_of_truth": "retained-github-actions-artifact-machine-readable-reports",
+  "workflow_run_id": 31814860815,
+  "artifact": {
+    "id": 9224679187,
+    "name": "v408-smoothing-direct-differential-31814860815",
+    "zip_sha256": "676191a22491899832d7426eef2ed2ca1b4ae29fd03c88c38a8a7d7b05fe98c9"
+  },
+  "candidate_commit": "56393a7571681bd1fcf5397eb48a1634398ff9c7",
+  "oracle_commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+  "input_sha256": "2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d",
+  "published_settings_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c",
+  "ms1_scan_count": 4081,
+  "adap_input_feature_count": 517,
+  "adap_input_records_sha256": "a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa",
+  "smoothing_algorithm_class": "io.github.mzmine.modules.dataprocessing.featdet_smoothing.savitzkygolay.SavitzkyGolaySmoothing",
+  "smoothing_algorithm_parameters_class": "io.github.mzmine.modules.dataprocessing.featdet_smoothing.savitzkygolay.SavitzkyGolayParameters",
+  "handle_original": "KEEP",
+  "smoothing_suffix": "sm",
+  "candidate_output_feature_count": 517,
+  "oracle_output_feature_count": 517,
+  "candidate_records_sha256": "1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971",
+  "oracle_records_sha256": "1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971",
+  "records_equal": true,
+  "first_mismatch": null,
+  "numerical_tolerance_applied": false,
+  "provenance_note": "Values were re-extracted from artifact 9224679187 after F-046 identified that later hand-maintained documentation had transcribed different hashes. This file freezes the retained artifact reports; it does not represent a scientific rerun."
+}
