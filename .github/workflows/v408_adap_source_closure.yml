@@ -10,9 +10,22 @@ on:
       - "datasets/parity/v408_adap_source_closure_manifest.json"
       - "scripts/audit_v408_source_closure.py"
       - "oracle/v408-boundaries/**"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_adap_source_closure.yml"
+      - "datasets/parity/v408_adap_source_closure_manifest.json"
+      - "scripts/audit_v408_source_closure.py"
+      - "oracle/v408-boundaries/**"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
 
 permissions:
   contents: read
+
+concurrency:
+  group: v408-adap-closure-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   audit-adap-closure:
