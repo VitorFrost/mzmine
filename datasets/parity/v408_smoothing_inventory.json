@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "inventory_id": "mzmine-v4.0.8-feature-smoothing-source-v1",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "source_prefix": "mzmine-community/src/main/java"
+  },
+  "candidate": {
+    "repository": "VitorFrost/mzmine",
+    "source_prefix": "src/main/java"
+  },
+  "package": "io/github/mzmine/modules/dataprocessing/featdet_smoothing",
+  "parameter_set_version": 1,
+  "classification": "direct-differential-pending",
+  "files": [
+    {"path":"SmoothingAlgorithm.java","oracle_sha1":"c26a032cb6c6ed0ef0fd35b1e2700b2c6b42328e","candidate_sha1":"c26a032cb6c6ed0ef0fd35b1e2700b2c6b42328e","classification":"identical-scientific-core"},
+    {"path":"SmoothingModule.java","oracle_sha1":"9d297cd70688b379fd691da87e88663a6f13b343","candidate_sha1":"9d297cd70688b379fd691da87e88663a6f13b343","classification":"identical-scientific-core"},
+    {"path":"SmoothingParameters.java","oracle_sha1":"e1519c426ac0f545c39442700b859b9d9d804cd7","candidate_sha1":"e1519c426ac0f545c39442700b859b9d9d804cd7","classification":"identical-scientific-core"},
+    {"path":"SmoothingTask.java","oracle_sha1":"324870813e7f0d58f8c77073bf667738195bce6f","candidate_sha1":"324870813e7f0d58f8c77073bf667738195bce6f","classification":"identical-scientific-core"},
+    {"path":"ZeroHandlingType.java","oracle_sha1":"76ae9b214b5c7cc78f53af6bd8075dc18a0110eb","candidate_sha1":"76ae9b214b5c7cc78f53af6bd8075dc18a0110eb","classification":"identical-scientific-core"},
+    {"path":"loess/LoessSmoothing.java","oracle_sha1":"4ded5a40677050840c0c407a941d55387b7c0d7c","candidate_sha1":"4ded5a40677050840c0c407a941d55387b7c0d7c","classification":"identical-scientific-core"},
+    {"path":"loess/LoessSmoothingParameters.java","oracle_sha1":"99ba5f3e9d7f4b6962d6b4665023c48595b1fe4b","candidate_sha1":"99ba5f3e9d7f4b6962d6b4665023c48595b1fe4b","classification":"identical-scientific-core"},
+    {"path":"savitzkygolay/SavitzkyGolayFilter.java","oracle_sha1":"b3d3d722bd236b1b6deea812376133a14144d71d","candidate_sha1":"b3d3d722bd236b1b6deea812376133a14144d71d","classification":"identical-scientific-core"},
+    {"path":"savitzkygolay/SavitzkyGolayParameters.java","oracle_sha1":"983c31afbefeb9a75f2153f64f649c979158e7a0","candidate_sha1":"983c31afbefeb9a75f2153f64f649c979158e7a0","classification":"identical-scientific-core"},
+    {"path":"savitzkygolay/SavitzkyGolaySmoothing.java","oracle_sha1":"ab5fb8e8d8cab874b49c168c67546736bf74de48","candidate_sha1":"ab5fb8e8d8cab874b49c168c67546736bf74de48","classification":"identical-scientific-core"}
+  ],
+  "excluded_ui_file": {
+    "path": "SmoothingSetupDialog.java",
+    "reason": "Interactive setup/preview only; not executed by the governed headless task differential."
+  },
+  "direct_gate": {
+    "dataset_id": "zenodo-14001110-banane-30ngml-001",
+    "upstream_state": "governed equivalent MS1 centroid plus governed equivalent ADAP output",
+    "settings_source": "published MZmine processing settings XML",
+    "status": "producer-pending"
+  }
+}
