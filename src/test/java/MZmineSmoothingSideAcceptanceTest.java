@@ -26,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.google.common.collect.Range;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.google.common.collect.Range;
 import io.github.mzmine.datamodel.DataPoint;
 import io.github.mzmine.datamodel.MZmineProject;
 import io.github.mzmine.datamodel.RawDataFile;
@@ -65,6 +65,7 @@ import io.github.mzmine.parameters.parametertypes.selectors.ScanSelection;
 import io.github.mzmine.taskcontrol.Task;
 import io.github.mzmine.taskcontrol.TaskStatus;
 import io.github.mzmine.util.MemoryMapStorage;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
@@ -100,9 +101,15 @@ class MZmineSmoothingSideAcceptanceTest {
           + "ModularADAPChromatogramBuilderModule";
   private static final String SMOOTHING_MODULE_CLASS =
       "io.github.mzmine.modules.dataprocessing.featdet_smoothing.SmoothingModule";
+  private static final String POINT_SIDECAR_FORMAT =
+      "tsv-v1:row_index,point_index,scan_number,rt_float32_bits,mz_float64_bits|null,"
+          + "intensity_float64_bits|null";
+  private static final String POINT_SIDECAR_HEADER =
+      "row_index\tpoint_index\tscan_number\trt_float32_bits\tmz_float64_bits\tintensity_float64_bits\n";
   private static final ObjectMapper JSON = new ObjectMapper()
       .enable(SerializationFeature.INDENT_OUTPUT)
       .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+  private static final HexFormat HEX = HexFormat.of();
 
   @AfterEach
   void cleanProject() {
@@ -116,9 +123,11 @@ class MZmineSmoothingSideAcceptanceTest {
     String inputValue = env.get("MZMINE_SMOOTHING_PARITY_INPUT");
     String settingsValue = env.get("MZMINE_SMOOTHING_PARITY_SETTINGS");
     String outputValue = env.get("MZMINE_SMOOTHING_PARITY_SIDE_OUTPUT");
+    String pointsOutputValue = env.get("MZMINE_SMOOTHING_PARITY_POINTS_OUTPUT");
     String side = env.get("MZMINE_SMOOTHING_PARITY_SIDE");
     Assumptions.assumeTrue(
-        inputValue != null && settingsValue != null && outputValue != null && side != null,
+        inputValue != null && settingsValue != null && outputValue != null
+            && pointsOutputValue != null && side != null,
         "Governed smoothing side-report inputs were not supplied");
     assertTrue(side.equals("candidate") || side.equals("oracle"),
         "Side must be exactly candidate or oracle");
@@ -126,6 +135,7 @@ class MZmineSmoothingSideAcceptanceTest {
     Path input = Path.of(inputValue).toAbsolutePath().normalize();
     Path settings = Path.of(settingsValue).toAbsolutePath().normalize();
     Path output = Path.of(outputValue).toAbsolutePath().normalize();
+    Path pointsOutput = Path.of(pointsOutputValue).toAbsolutePath().normalize();
     assertTrue(Files.isRegularFile(input), "Governed mzML is missing");
     assertTrue(Files.isRegularFile(settings), "Published settings XML is missing");
     verifyHash(input, requireEnvironment("MZMINE_SMOOTHING_PARITY_INPUT_SHA256"));
@@ -155,20 +165,26 @@ class MZmineSmoothingSideAcceptanceTest {
         ? runCandidateSmoothing(project, adap, smoothing.cloneParameterSet(true))
         : runOracleSmoothing(probeClass, project, adap, smoothing.cloneParameterSet(true));
 
-    List<Map<String, Object>> postRecords = detailedSnapshot(smoothed, raw, preRecords);
+    SnapshotResult snapshot = writeDetailedSnapshot(smoothed, raw, preRecords, pointsOutput);
+    List<Map<String, Object>> postRecords = snapshot.records();
     Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 1);
-    report.put("gate_id", "mzmine-v4.0.8-smoothing-side-report-v1");
+    report.put("schema_version", 2);
+    report.put("gate_id", "mzmine-v4.0.8-smoothing-side-report-v2");
     report.put("implementation", side);
     report.put("candidate_commit", requireEnvironment("MZMINE_SMOOTHING_PARITY_CANDIDATE_COMMIT"));
     report.put("oracle_commit", ORACLE_COMMIT);
     report.put("input_sha256", sha256(input));
     report.put("published_settings_sha256", sha256(settings));
-    report.put("ms1_scan_count", raw.getScans().stream().filter(scan -> scan.getMSLevel() == 1).count());
+    report.put("ms1_scan_count",
+        raw.getScans().stream().filter(scan -> scan.getMSLevel() == 1).count());
     report.put("adap_feature_count", adap.getNumberOfRows());
     report.put("pre_smoothing_records_sha256", preRecordsSha);
     report.put("settings", governedSettings);
     report.put("smoothed_feature_count", postRecords.size());
+    report.put("complete_point_count", snapshot.completePointCount());
+    report.put("points_sidecar_format", POINT_SIDECAR_FORMAT);
+    report.put("points_sidecar_sha256", snapshot.pointsSha256());
+    report.put("points_sidecar_bytes", snapshot.pointsBytes());
     report.put("records_sha256", sha256(JSON.writeValueAsString(postRecords)));
     report.put("records", postRecords);
 
@@ -177,6 +193,7 @@ class MZmineSmoothingSideAcceptanceTest {
     }
     JSON.writeValue(output.toFile(), report);
     assertTrue(Files.isRegularFile(output), "Smoothing side report was not written");
+    assertTrue(Files.isRegularFile(pointsOutput), "Smoothing complete-point sidecar was not written");
   }
 
   private static void importMzml(Path input) throws InterruptedException {
@@ -328,20 +345,23 @@ class MZmineSmoothingSideAcceptanceTest {
     assertNotNull(selected);
     value.put("algorithm_class", selected.getModule().getClass().getName());
     value.put("algorithm_name", selected.getModule().getName());
-    value.put("handle_original", String.valueOf(parameters.getValue(SmoothingParameters.handleOriginal)));
+    value.put("handle_original",
+        String.valueOf(parameters.getValue(SmoothingParameters.handleOriginal)));
     value.put("suffix", parameters.getValue(SmoothingParameters.suffix));
 
     ParameterSet embedded = selected.getParameterSet();
     if (selected.getModule() instanceof SavitzkyGolaySmoothing) {
       OptionalParameter<?> rt = embedded.getParameter(SavitzkyGolayParameters.rtSmoothing);
-      OptionalParameter<?> mobility = embedded.getParameter(SavitzkyGolayParameters.mobilitySmoothing);
+      OptionalParameter<?> mobility =
+          embedded.getParameter(SavitzkyGolayParameters.mobilitySmoothing);
       value.put("rt_smoothing_enabled", rt.getValue());
       value.put("rt_smoothing_points", rt.getEmbeddedParameter().getValue());
       value.put("mobility_smoothing_enabled", mobility.getValue());
       value.put("mobility_smoothing_points", mobility.getEmbeddedParameter().getValue());
     } else if (selected.getModule() instanceof LoessSmoothing) {
       OptionalParameter<?> rt = embedded.getParameter(LoessSmoothingParameters.rtSmoothing);
-      OptionalParameter<?> mobility = embedded.getParameter(LoessSmoothingParameters.mobilitySmoothing);
+      OptionalParameter<?> mobility =
+          embedded.getParameter(LoessSmoothingParameters.mobilitySmoothing);
       value.put("rt_smoothing_enabled", rt.getValue());
       value.put("rt_smoothing_width_scans", rt.getEmbeddedParameter().getValue());
       value.put("mobility_smoothing_enabled", mobility.getValue());
@@ -370,38 +390,72 @@ class MZmineSmoothingSideAcceptanceTest {
     return records;
   }
 
-  private static List<Map<String, Object>> detailedSnapshot(FeatureList list, RawDataFile raw,
-      List<Map<String, Object>> preRecords) throws Exception {
+  private static SnapshotResult writeDetailedSnapshot(FeatureList list, RawDataFile raw,
+      List<Map<String, Object>> preRecords, Path pointsOutput) throws Exception {
     assertEquals(preRecords.size(), list.getNumberOfRows(),
         "Smoothing must not silently add/remove rows in the governed path");
-    List<Map<String, Object>> records = new ArrayList<>(list.getNumberOfRows());
-    for (int index = 0; index < list.getNumberOfRows(); index++) {
-      FeatureListRow row = list.getRow(index);
-      Feature feature = row.getFeature(raw);
-      assertNotNull(feature);
-      Map<String, Object> pre = preRecords.get(index);
-      Map<String, Object> record = new LinkedHashMap<>();
-      record.put("row_index", index);
-      record.put("row_id", row.getID());
-      record.put("input_row_id", pre.get("row_id"));
-      record.put("input_scan_count", pre.get("scan_count"));
-      record.put("input_series_sha256", pre.get("series_sha256"));
-      record.put("mz", feature.getMZ());
-      record.put("rt", feature.getRT());
-      record.put("height", feature.getHeight());
-      record.put("area", feature.getArea());
-      record.put("representative_scan_number",
-          feature.getRepresentativeScan() == null ? null
-              : feature.getRepresentativeScan().getScanNumber());
-      record.put("rt_range", range(feature.getRawDataPointsRTRange()));
-      record.put("mz_range", range(feature.getRawDataPointsMZRange()));
-      record.put("intensity_range", range(feature.getRawDataPointsIntensityRange()));
-      record.put("scan_count", feature.getScanNumbers().size());
-      record.put("series_sha256", featureSeriesSha256(feature));
-      record.put("series", completeSeries(feature));
-      records.add(record);
+    if (pointsOutput.getParent() != null) {
+      Files.createDirectories(pointsOutput.getParent());
     }
-    return records;
+
+    List<Map<String, Object>> records = new ArrayList<>(list.getNumberOfRows());
+    long completePointCount = 0L;
+    try (BufferedWriter writer = Files.newBufferedWriter(pointsOutput, StandardCharsets.UTF_8)) {
+      writer.write(POINT_SIDECAR_HEADER);
+      for (int rowIndex = 0; rowIndex < list.getNumberOfRows(); rowIndex++) {
+        FeatureListRow row = list.getRow(rowIndex);
+        Feature feature = row.getFeature(raw);
+        assertNotNull(feature);
+        Map<String, Object> pre = preRecords.get(rowIndex);
+        MessageDigest featureDigest = MessageDigest.getInstance("SHA-256");
+
+        for (int pointIndex = 0; pointIndex < feature.getScanNumbers().size(); pointIndex++) {
+          Scan scan = feature.getScanAtIndex(pointIndex);
+          DataPoint point = feature.getDataPointAtIndex(pointIndex);
+          String line = canonicalPointLine(rowIndex, pointIndex, scan, point);
+          writer.write(line);
+          featureDigest.update(line.getBytes(StandardCharsets.UTF_8));
+          completePointCount++;
+        }
+
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("row_index", rowIndex);
+        record.put("row_id", row.getID());
+        record.put("input_row_id", pre.get("row_id"));
+        record.put("input_scan_count", pre.get("scan_count"));
+        record.put("input_series_sha256", pre.get("series_sha256"));
+        record.put("mz", feature.getMZ());
+        record.put("rt", feature.getRT());
+        record.put("height", feature.getHeight());
+        record.put("area", feature.getArea());
+        record.put("representative_scan_number",
+            feature.getRepresentativeScan() == null ? null
+                : feature.getRepresentativeScan().getScanNumber());
+        record.put("rt_range", range(feature.getRawDataPointsRTRange()));
+        record.put("mz_range", range(feature.getRawDataPointsMZRange()));
+        record.put("intensity_range", range(feature.getRawDataPointsIntensityRange()));
+        record.put("scan_count", feature.getScanNumbers().size());
+        record.put("series_sha256", HexFormat.of().formatHex(featureDigest.digest()));
+        records.add(record);
+      }
+    }
+
+    return new SnapshotResult(records, completePointCount, sha256(pointsOutput),
+        Files.size(pointsOutput));
+  }
+
+  private static String canonicalPointLine(int rowIndex, int pointIndex, Scan scan,
+      DataPoint point) {
+    String mzBits = point == null ? "null"
+        : HEX.toHexDigits(Double.doubleToLongBits(point.getMZ()));
+    String intensityBits = point == null ? "null"
+        : HEX.toHexDigits(Double.doubleToLongBits(point.getIntensity()));
+    return rowIndex + "\t"
+        + pointIndex + "\t"
+        + scan.getScanNumber() + "\t"
+        + HEX.toHexDigits(Float.floatToIntBits(scan.getRetentionTime())) + "\t"
+        + mzBits + "\t"
+        + intensityBits + "\n";
   }
 
   private static List<Number> range(Range<? extends Number> range) {
@@ -421,22 +475,6 @@ class MZmineSmoothingSideAcceptanceTest {
       digest.update(token.getBytes(StandardCharsets.UTF_8));
     }
     return HexFormat.of().formatHex(digest.digest());
-  }
-
-  private static List<Map<String, Object>> completeSeries(Feature feature) {
-    List<Map<String, Object>> points = new ArrayList<>(feature.getScanNumbers().size());
-    for (int index = 0; index < feature.getScanNumbers().size(); index++) {
-      Scan scan = feature.getScanAtIndex(index);
-      DataPoint point = feature.getDataPointAtIndex(index);
-      Map<String, Object> value = new LinkedHashMap<>();
-      value.put("index", index);
-      value.put("scan_number", scan.getScanNumber());
-      value.put("rt", scan.getRetentionTime());
-      value.put("mz", point == null ? null : point.getMZ());
-      value.put("intensity", point == null ? null : point.getIntensity());
-      points.add(value);
-    }
-    return points;
   }
 
   private static void verifyHash(Path path, String expected) throws Exception {
@@ -468,5 +506,9 @@ class MZmineSmoothingSideAcceptanceTest {
       throw new IllegalStateException("Missing governed environment variable " + name);
     }
     return value;
+  }
+
+  private record SnapshotResult(List<Map<String, Object>> records, long completePointCount,
+                                String pointsSha256, long pointsBytes) {
   }
 }
