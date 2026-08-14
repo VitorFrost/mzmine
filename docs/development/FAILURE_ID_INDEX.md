@@ -4,7 +4,7 @@
 
 `F-xxx` identifiers are repository-global. They are not local to an issue, pull request, workflow, or `agent/*` branch. This index is the canonical allocation table used to prevent parallel work from assigning the same identifier to unrelated failures.
 
-Detailed original evidence remains in the append-only failure records, issue #27, issue #50, or the relevant pull request/workflow artifacts. This index records identity and current resolution state; it does not replace those records.
+Detailed original evidence remains in the append-only failure records, issue #27, issue #50, issue #55, issue #59, or the relevant pull request/workflow artifacts. This index records identity and current resolution state; it does not replace those records.
 
 ## Allocation rule
 
@@ -19,7 +19,7 @@ Before assigning a new identifier:
 
 If a collision is found later, preserve the original evidence, reassign the colliding record to the next unused canonical identifier, and record the alias/correction history.
 
-As of the 2026-08-14 ADAP parity integration, identifiers through **F-033** are allocated. The next candidate is **F-034**, only after a fresh repository-wide check confirms that no parallel work has allocated it.
+As of the 2026-08-14 minimum-search resolver continuation, identifiers through **F-044** are allocated. The next candidate is **F-045**, only after a fresh repository-wide check confirms that no parallel work has allocated it.
 
 ## Canonical allocation table
 
@@ -58,10 +58,23 @@ As of the 2026-08-14 ADAP parity integration, identifiers through **F-033** are 
 | F-031 | Accidental `docs/development/NOOP` file created directly on `open-offline-main` | **Validated as corrected** by commit `89f1d36f118998fd10b7d8918e1c08a770ddb723`; only the accidental file was removed |
 | F-032 | Superseded duplicate ADAP harness test introduced undeclared Python `jsonschema` dependency | **Resolved on superseded branch; not merged**. Test made dependency-neutral and duplicate PR #52 closed |
 | F-033 | Governed ADAP differential exhausted heap when candidate and v4.0.8 oracle ran sequentially in one JVM | **Validated as resolved** by independent candidate/oracle JVM producers; direct run `31812225494` completed with 517/517 exact normalized records and identical record SHA-256 |
+| F-034 | Smoothing source closure escaped through documentation-only importer references | **Resolved** by bounding Javadoc-only import edges; issue #55 records commit `3b09a4de86005738391cc7e21f357eee2fc8ff21`. A later stale-SHA metadata-write incident was also historically labelled F-034 in issue #55; that duplicate label is preserved as historical evidence rather than treated as a second canonical allocation |
+| F-035 | GitHub connector action called with the wrong argument-name convention during resolver governance inspection | **Resolved operationally** by using each action's discovered schema; no repository/scientific mutation occurred |
+| F-036 | Resolver differential workflow referenced a missing probe-preparation unittest | **Correction committed** as `d7613140314584c3f031cd2d7a6b7cc49a1aff59`; exact-head validation continues with the resolver differential |
+| F-037 | Accepted smoothing differential was merged without synchronizing the global machine-readable parity promotion | **Correction still required** before resolver promotion/merge; no scientific rerun/tolerance change allowed |
+| F-038 | Session container could not resolve GitHub for a read-only local clone | **Resolved operationally** by using the authenticated GitHub connector as repository source of truth; no network workaround or scientific change |
+| F-039 | Initial resolver inventory incorrectly required the legacy generic `FeatureResolver` framework API to be byte-identical | **Source-contract correction validated** by run `31825118473`: v2 audit PASS with 9 governed files, 6 identical and 3 exact reviewed differences; workflow assertion drift handled separately as F-044 |
+| F-040 | Resolver side producer attempted nonexistent no-argument construction of `MinimumSearchFeatureResolver` | **Correction committed** as `9bfc77120f4c8116606a05414886f2b9439722f0`; producer now requires the real task constructor and lets published parameters select the modern resolver; direct-run validation pending |
+| F-041 | Resolver source inventory referenced nonexistent `FeatureResolverParameters.java` | **Validated as corrected** by v2 inventory and run `31825118473`; actual framework dependencies `GeneralResolverParameters`, `Resolver`, and `AbstractResolver` are governed |
+| F-042 | Stale optimistic blob SHA rejected resolver probe-unittest update | **Resolved** after fresh fetch/replay; accepted update commit `62621a8b30b8945632f72aa8c8821281400fe87b` |
+| F-043 | Exploratory smoothing producer lookup guessed a nonexistent filename on the resolver branch | **Resolved operationally** through repository/PR file discovery; no repository/scientific mutation |
+| F-044 | Source-gate workflow retained obsolete `7/7 identical` assertions after source-contract v2 correction | **Correction committed** as `0c6f47ffcd309cb3b846bbcb1e6ca1c2a7fe456d`; exact-head validation pending |
 
-## ADAP parity consequence
+## Accepted direct parity consequences
 
-F-033 was a differential-harness lifecycle problem, not a scientific mismatch. The accepted isolated-producer run retained the same governed input/settings and executed the open-offline and frozen v4.0.8 ADAP paths independently. The final normalized records were exactly equal:
+### ADAP
+
+F-033 was a differential-harness lifecycle problem, not a scientific mismatch. The accepted isolated-producer run retained the same governed input/settings and executed the open-offline and frozen v4.0.8 ADAP paths independently:
 
 - candidate feature count: `517`;
 - oracle feature count: `517`;
@@ -71,6 +84,23 @@ F-033 was a differential-harness lifecycle problem, not a scientific mismatch. T
 - `first_mismatch: null`.
 
 The same-JVM OOM remains relevant evidence for the later memory/lifecycle release gate; process isolation does not constitute a claim of equal memory efficiency.
+
+### Smoothing
+
+The governed Savitzky-Golay smoothing differential also produced exact equality from the accepted ADAP input state:
+
+- candidate output records: `517`;
+- oracle output records: `517`;
+- normalized output SHA-256: `fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2` on both sides;
+- `records_equal: true`;
+- `first_mismatch: null`;
+- no numerical tolerance was used for the normalized record comparison.
+
+F-037 concerns only synchronization of this already-accepted evidence into the global governance inventory.
+
+### Minimum-search resolver source contract
+
+The source contract is intentionally narrower than whole-framework byte identity. Exact v4.0.8 and candidate are byte-identical for the executed modern resolver interface, `AbstractResolver`, task factory, concrete local-minimum algorithm, concrete module, and concrete parameter class. Three generic framework files are frozen as exact reviewed differences: the legacy `FeatureResolver` API, `GeneralResolverParameters` legacy R declaration, and `FeatureResolverTask` branches for legacy R/group-MS2 integration. Direct behavioral evidence is still mandatory before `Equivalent` promotion.
 
 ## Governance lessons
 
@@ -82,6 +112,8 @@ Parallel issue/branch work caused several historical ID collisions. The canonica
 - the disproven ADAP ordering hypothesis is F-029;
 - the accidental direct-main documentation writes are F-030/F-031;
 - the superseded duplicate Python dependency failure is F-032;
-- the real ADAP same-JVM memory failure is F-033.
+- the real ADAP same-JVM memory failure is F-033;
+- the canonical smoothing closure overreach is F-034, while the duplicate F-034 wording for a later stale-SHA write remains historical issue evidence;
+- resolver continuation failures F-035 through F-044 were allocated before their corresponding corrections.
 
-Future work must consult this file and active branch/issue history before allocating F-034 or later IDs. A machine-enforced uniqueness gate remains recommended before the 4.0 release candidate.
+Future work must consult this file and active branch/issue history before allocating F-045 or later IDs. A machine-enforced uniqueness gate remains recommended before the 4.0 release candidate.
