@@ -1,0 +1,99 @@
+name: MZmine v4.0.8 ADAP chromatogram source gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "open-offline-main"
+      - "agent/integrate-v408-adap-parity-v2"
+    paths:
+      - ".github/workflows/v408_adap_chromatogram_source_gate.yml"
+      - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
+      - "scripts/audit_v408_adap_chromatogram_builder.py"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_adap_chromatogram_source_gate.yml"
+      - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
+      - "scripts/audit_v408_adap_chromatogram_builder.py"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-adap-source-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  audit-adap-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      INVENTORY: datasets/parity/v408_adap_chromatogram_builder_inventory.json
+      EVIDENCE: oracle/v408-executable/evidence/v408-adap-chromatogram-source-audit.json
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out frozen public v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact oracle commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+
+      - name: Audit frozen ADAP source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_v408_adap_chromatogram_builder.py \
+            --fork-root . \
+            --oracle-root "${ORACLE_PATH}" \
+            --inventory "${INVENTORY}" \
+            --output "${EVIDENCE}"
+
+      - name: Assert source audit contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("oracle/v408-executable/evidence/v408-adap-chromatogram-source-audit.json")
+          report = json.loads(p.read_text(encoding="utf-8"))
+          assert report["status"] == "PASS"
+          assert report["governed_file_count"] == 5
+          assert report["identical_file_count"] == 2
+          assert report["direct_differential_required"] is True
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload source-gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-adap-chromatogram-source-${{ github.run_id }}
+          path: oracle/v408-executable/evidence/v408-adap-chromatogram-source-audit.json
+          if-no-files-found: error
+          retention-days: 30
