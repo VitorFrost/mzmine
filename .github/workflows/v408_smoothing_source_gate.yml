@@ -1,0 +1,100 @@
+name: MZmine v4.0.8 smoothing source gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-smoothing-parity"
+    paths:
+      - ".github/workflows/v408_smoothing_source_gate.yml"
+      - "datasets/parity/v408_smoothing_source_inventory.json"
+      - "scripts/audit_v408_smoothing_source.py"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_smoothing/**"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_smoothing_source_gate.yml"
+      - "datasets/parity/v408_smoothing_source_inventory.json"
+      - "scripts/audit_v408_smoothing_source.py"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_smoothing/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-smoothing-source-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  audit-smoothing-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      INVENTORY: datasets/parity/v408_smoothing_source_inventory.json
+      EVIDENCE: build/smoothing_parity/v408-smoothing-source-audit.json
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out frozen public v4.0.8 oracle
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact oracle commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+
+      - name: Audit frozen smoothing source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_v408_smoothing_source.py \
+            --fork-root . \
+            --oracle-root "${ORACLE_PATH}" \
+            --inventory "${INVENTORY}" \
+            --output "${EVIDENCE}"
+
+      - name: Assert source audit contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("build/smoothing_parity/v408-smoothing-source-audit.json")
+          report = json.loads(p.read_text(encoding="utf-8"))
+          assert report["status"] == "PASS"
+          assert report["governed_file_count"] == 11
+          assert report["identical_scientific_file_count"] == 10
+          assert report["reviewed_gui_difference_count"] == 1
+          assert report["parameter_set_version"] == 1
+          assert report["direct_differential_required"] is True
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload source-gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-smoothing-source-${{ github.run_id }}
+          path: build/smoothing_parity/v408-smoothing-source-audit.json
+          if-no-files-found: error
+          retention-days: 30
