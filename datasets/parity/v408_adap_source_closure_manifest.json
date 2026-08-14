@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v3",
+  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v4",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -19,12 +19,8 @@
     "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ADAPChromatogram",
     "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ExpandedDataPoint"
   ],
-  "internal_prefixes": [
-    "io.github.mzmine."
-  ],
-  "prohibited_prefixes": [
-    "io.mzio."
-  ],
+  "internal_prefixes": ["io.github.mzmine."],
+  "prohibited_prefixes": ["io.mzio."],
   "reviewed_boundaries": {
     "io.github.mzmine.main.MZmineCore": {
       "classification": "application-bootstrap-boundary",
@@ -32,19 +28,31 @@
     },
     "io.github.mzmine.gui.MZmineGUI": {
       "classification": "headless-gui-activation-boundary",
-      "reason": "ModularFeatureList requires ProjectService and the real default ProjectManagerImpl, so project behavior is retained. ProjectManagerImpl references MZmineGUI only from setCurrentProject after the MZmineCore headless guard. The governed chromatogram harness uses the already-created default project, never calls setCurrentProject, never starts JavaFX UI, and does not execute account or cloud behavior. Any executable boundary must fail if GUI activation is invoked."
+      "reason": "ModularFeatureList requires ProjectService and the real default ProjectManagerImpl, so project behavior is retained. ProjectManagerImpl references MZmineGUI only from setCurrentProject after the MZmineCore headless guard. The governed harness uses the already-created default project and never calls setCurrentProject. Any executable boundary must fail if GUI activation is invoked."
+    },
+    "io.github.mzmine.gui.preferences.MZminePreferences": {
+      "classification": "global-ui-preferences-boundary",
+      "reason": "SimpleParameterSet exposes application preference integration, but the governed harness constructs and sets ADAP parameters explicitly and never reads or edits global GUI preferences. Scientific parameter values remain in the real ParameterSet implementation. Any executable preference boundary must fail if accessed."
+    },
+    "io.github.mzmine.modules.io.projectload.ProjectLoadModule": {
+      "classification": "project-load-application-boundary",
+      "reason": "ProjectManagerImpl references ProjectLoadModule only while replacing the current project when a project file is present. The governed harness uses the default in-memory project and never loads or replaces a project. Any executable boundary must fail if project-load behavior is invoked."
     },
     "io.github.mzmine.modules.visualization.chromatogram.ChromatogramVisualizerModule": {
       "classification": "interactive-visualization-boundary",
-      "reason": "FeatureShapeType references this module only from its double-click UI action. ADAP sets FeatureShapeType metadata but the governed headless comparison never creates a feature table, handles a double click, or invokes visualization. Any executable boundary must fail if visualization is invoked."
+      "reason": "FeatureShapeType references this module only from its double-click UI action. ADAP sets FeatureShapeType metadata but the governed headless comparison never invokes visualization. Any executable boundary must fail if visualization is invoked."
+    },
+    "io.github.mzmine.modules.visualization.chromatogram.TICVisualizerTab": {
+      "classification": "interactive-visualization-tab-boundary",
+      "reason": "The closure reaches TICVisualizerTab through feature annotation display types. The governed chromatogram task does not create visualization tabs or a desktop. Any executable boundary must be compile-only and fail if instantiated."
     },
     "io.github.mzmine.datamodel.data_access.BinningMobilogramDataAccess": {
       "classification": "non-ims-overload-boundary",
       "reason": "EfficientDataAccess exposes a separate IMSRawDataFile overload that constructs BinningMobilogramDataAccess. The governed Banane mzML comparison is explicitly non-IMS and ADAP calls the RawDataFile + ScanDataType + ScanSelection overload, which constructs FilteredScanDataAccess directly. Any executable boundary must fail if the IMS constructor is invoked."
     },
     "io.github.mzmine.util.MemoryMapStorage": {
-      "classification": "storage-boundary-pending-runtime-design",
-      "reason": "The frozen public tree does not provide the fork's storage implementation. The chromatogram gate uses nullable in-memory storage; no storage behavior is reconstructed."
+      "classification": "nullable-storage-boundary",
+      "reason": "The frozen public tree does not provide the fork's storage implementation. The chromatogram gate uses null in-memory storage; no storage behavior is reconstructed."
     }
   },
   "policy": {
