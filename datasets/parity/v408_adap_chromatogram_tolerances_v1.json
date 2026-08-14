@@ -1,0 +1,11 @@
+{
+  "representative_mz": {"absolute": 1e-7, "relative": 1e-9},
+  "rt_start_minutes": {"absolute": 1e-7, "relative": 6e-8},
+  "rt_end_minutes": {"absolute": 1e-7, "relative": 6e-8},
+  "apex_rt_minutes": {"absolute": 1e-7, "relative": 6e-8},
+  "height": {"absolute": 1e-6, "relative": 1e-9},
+  "area": {"absolute": 1e-6, "relative": 1e-9},
+  "point_series.rt_minutes": {"absolute": 1e-7, "relative": 6e-8},
+  "point_series.mz": {"absolute": 1e-7, "relative": 1e-9},
+  "point_series.intensity": {"absolute": 1e-6, "relative": 1e-9}
+}
