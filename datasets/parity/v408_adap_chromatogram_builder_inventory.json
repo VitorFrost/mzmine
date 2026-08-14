@@ -10,6 +10,32 @@
     "repository": "VitorFrost/mzmine",
     "source_prefix": "src/main/java"
   },
+  "direct_differential": {
+    "gate_id": "mzmine-v4.0.8-adap-chromatogram-direct-differential-v2",
+    "scope": "non-IMS, non-imaging LC-MS; explicit centroid MS1 mass lists; published ADAP workflow settings",
+    "workflow_run_id": 31812225494,
+    "candidate_commit": "c80c524d3961ad03140e9340377c6d9f3fa51c7a",
+    "dataset_id": "zenodo-14001110-banane-30ngml-001",
+    "input_sha256": "2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d",
+    "published_settings_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c",
+    "ms1_scan_count": 4081,
+    "settings": {
+      "source_ms_level": 1,
+      "centroid_noise_level": 0.0,
+      "minimum_consecutive_scans": 8,
+      "minimum_intensity_for_consecutive_scans": 50000.0,
+      "minimum_absolute_height": 100000.0,
+      "mz_tolerance": "0.001 m/z or 5.0 ppm"
+    },
+    "candidate_feature_count": 517,
+    "oracle_feature_count": 517,
+    "candidate_records_sha256": "a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa",
+    "oracle_records_sha256": "a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa",
+    "records_equal": true,
+    "first_mismatch": null,
+    "report_sha256": "04ce8577c2ffb9252068f9c32a80ee934eef66294ea47317c361af20179ce538",
+    "interpretation": "Exact normalized behavioral equivalence was observed for the governed non-imaging LC-MS scope. This evidence does not claim imaging or IMS parity."
+  },
   "package": "io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder",
   "files": [
     {
@@ -37,7 +63,7 @@
         "mz_tolerance_ppm": 10.0,
         "suffix": "chromatograms"
       },
-      "note": "The parameter declarations and numeric defaults governing chromatogram construction match; v4.0.8 changes citation/setup-dialog presentation. Minimum absolute height has no safe numeric default and must be set explicitly by the future differential harness."
+      "note": "The parameter declarations and numeric defaults governing chromatogram construction match; v4.0.8 changes citation/setup-dialog presentation. Minimum absolute height has no safe numeric default. The passing direct differential therefore loaded the explicit published workflow values instead of relying on defaults."
     },
     {
       "name": "ModularADAPChromatogramBuilderModule.java",
@@ -55,7 +81,7 @@
         "candidate sets FeatureShapeType to !isImaging while v4.0.8 only writes true for non-imaging rows",
         "candidate uses FeatureListUtils.sortByDefaultRT while v4.0.8 uses FeatureListUtils.sortByDefault"
       ],
-      "note": "Chromatogram seeding, m/z range assignment, continuous-point filtering, zero-edge insertion, and conversion to ModularFeature are unchanged in the audited task body. Output ordering remains a direct-differential question."
+      "note": "Source-level differences still require behavioral evidence rather than source inference. The governed non-imaging LC-MS differential now passes exactly: 517 features on both sides with identical normalized-record SHA-256."
     }
   ]
 }
