@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v2",
+  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v3",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -32,11 +32,19 @@
     },
     "io.github.mzmine.gui.MZmineGUI": {
       "classification": "headless-gui-activation-boundary",
-      "reason": "ModularFeatureList requires ProjectService and the real default ProjectManagerImpl, so project behavior is retained. ProjectManagerImpl references MZmineGUI only from setCurrentProject after the MZmineCore headless guard. The governed chromatogram harness uses the already-created default project, never calls setCurrentProject, never starts JavaFX UI, and does not execute account or cloud behavior. The executable boundary, if this closure succeeds, may preserve only the compile-time GUI activation signature and must fail the test if invoked."
+      "reason": "ModularFeatureList requires ProjectService and the real default ProjectManagerImpl, so project behavior is retained. ProjectManagerImpl references MZmineGUI only from setCurrentProject after the MZmineCore headless guard. The governed chromatogram harness uses the already-created default project, never calls setCurrentProject, never starts JavaFX UI, and does not execute account or cloud behavior. Any executable boundary must fail if GUI activation is invoked."
+    },
+    "io.github.mzmine.modules.visualization.chromatogram.ChromatogramVisualizerModule": {
+      "classification": "interactive-visualization-boundary",
+      "reason": "FeatureShapeType references this module only from its double-click UI action. ADAP sets FeatureShapeType metadata but the governed headless comparison never creates a feature table, handles a double click, or invokes visualization. Any executable boundary must fail if visualization is invoked."
+    },
+    "io.github.mzmine.datamodel.data_access.BinningMobilogramDataAccess": {
+      "classification": "non-ims-overload-boundary",
+      "reason": "EfficientDataAccess exposes a separate IMSRawDataFile overload that constructs BinningMobilogramDataAccess. The governed Banane mzML comparison is explicitly non-IMS and ADAP calls the RawDataFile + ScanDataType + ScanSelection overload, which constructs FilteredScanDataAccess directly. Any executable boundary must fail if the IMS constructor is invoked."
     },
     "io.github.mzmine.util.MemoryMapStorage": {
       "classification": "storage-boundary-pending-runtime-design",
-      "reason": "The frozen public tree does not provide the fork's storage implementation. The closure test inventories the scientific dependency graph before a runtime storage strategy is reviewed; no storage behavior is reconstructed at this gate."
+      "reason": "The frozen public tree does not provide the fork's storage implementation. The chromatogram gate uses nullable in-memory storage; no storage behavior is reconstructed."
     }
   },
   "policy": {
