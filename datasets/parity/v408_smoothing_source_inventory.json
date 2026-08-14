@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "inventory_id": "mzmine-v4.0.8-smoothing-source-v1",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "tag": "v4.0.8",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "source_prefix": "mzmine-community/src/main/java/"
+  },
+  "candidate": {
+    "repository": "VitorFrost/mzmine",
+    "base_commit": "d46ca9327c37000a9849dd87c60f190b48a35b1b",
+    "source_prefix": "src/main/java/"
+  },
+  "parameter_set": {
+    "class": "io.github.mzmine.modules.dataprocessing.featdet_smoothing.SmoothingParameters",
+    "version": 1,
+    "oracle_sha1": "e1519c426ac0f545c39442700b859b9d9d804cd7",
+    "candidate_sha1": "e1519c426ac0f545c39442700b859b9d9d804cd7",
+    "status": "identical"
+  },
+  "files": [
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/SmoothingAlgorithm.java",
+      "oracle_sha1": "c26a032cb6c6ed0ef0fd35b1e2700b2c6b42328e",
+      "candidate_sha1": "c26a032cb6c6ed0ef0fd35b1e2700b2c6b42328e",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/SmoothingModule.java",
+      "oracle_sha1": "9d297cd70688b379fd691da87e88663a6f13b343",
+      "candidate_sha1": "9d297cd70688b379fd691da87e88663a6f13b343",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/SmoothingParameters.java",
+      "oracle_sha1": "e1519c426ac0f545c39442700b859b9d9d804cd7",
+      "candidate_sha1": "e1519c426ac0f545c39442700b859b9d9d804cd7",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/SmoothingTask.java",
+      "oracle_sha1": "324870813e7f0d58f8c77073bf667738195bce6f",
+      "candidate_sha1": "324870813e7f0d58f8c77073bf667738195bce6f",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/ZeroHandlingType.java",
+      "oracle_sha1": "76ae9b214b5c7cc78f53af6bd8075dc18a0110eb",
+      "candidate_sha1": "76ae9b214b5c7cc78f53af6bd8075dc18a0110eb",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/loess/LoessSmoothing.java",
+      "oracle_sha1": "4ded5a40677050840c0c407a941d55387b7c0d7c",
+      "candidate_sha1": "4ded5a40677050840c0c407a941d55387b7c0d7c",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/loess/LoessSmoothingParameters.java",
+      "oracle_sha1": "99ba5f3e9d7f4b6962d6b4665023c48595b1fe4b",
+      "candidate_sha1": "99ba5f3e9d7f4b6962d6b4665023c48595b1fe4b",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/savitzkygolay/SavitzkyGolayFilter.java",
+      "oracle_sha1": "b3d3d722bd236b1b6deea812376133a14144d71d",
+      "candidate_sha1": "b3d3d722bd236b1b6deea812376133a14144d71d",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/savitzkygolay/SavitzkyGolayParameters.java",
+      "oracle_sha1": "983c31afbefeb9a75f2153f64f649c979158e7a0",
+      "candidate_sha1": "983c31afbefeb9a75f2153f64f649c979158e7a0",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/savitzkygolay/SavitzkyGolaySmoothing.java",
+      "oracle_sha1": "ab5fb8e8d8cab874b49c168c67546736bf74de48",
+      "candidate_sha1": "ab5fb8e8d8cab874b49c168c67546736bf74de48",
+      "classification": "identical-scientific-core"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_smoothing/SmoothingSetupDialog.java",
+      "oracle_sha1": "b6c48313342af3e8b00ab7918b3f6997f3715684",
+      "candidate_sha1": "30c95985c9ae0ffa0df026da6c5cc8ef94eecab0",
+      "classification": "reviewed-gui-only-difference",
+      "reason": "Setup dialog presentation is outside the governed headless scientific execution path. The parameter set and task executed by the workflow are byte-identical."
+    }
+  ],
+  "governed_scope": {
+    "mode": "non-imaging LC-MS",
+    "stage": "feature smoothing after governed ADAP output",
+    "published_settings_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c",
+    "direct_differential_required": true
+  }
+}
