@@ -3,7 +3,8 @@
 
 The source transformation is intentionally narrow and fail-closed:
 1. verify the frozen oracle commit and Git blob of the upstream task;
-2. rename only the task class so it can coexist with the candidate implementation;
+2. rename only exact Java identifier occurrences of the task class so it can coexist with the
+   candidate implementation;
 3. for the explicitly non-imaging governed probe, map v4.0.8 sortByDefault(...) to
    sortByDefaultRT(...). Frozen v4.0.8 FeatureListUtils defines these as equivalent for every
    non-ImagingRawDataFile.
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -47,6 +49,19 @@ def canonical_sha(value: dict) -> str:
   return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def identifier_pattern(identifier: str) -> re.Pattern[str]:
+  return re.compile(rf"(?<![A-Za-z0-9_$]){re.escape(identifier)}(?![A-Za-z0-9_$])")
+
+
+def identifier_count(source: str, identifier: str) -> int:
+  return len(identifier_pattern(identifier).findall(source))
+
+
+def rename_identifier(source: str, old: str, new: str) -> tuple[str, int]:
+  pattern = identifier_pattern(old)
+  return pattern.subn(new, source)
+
+
 def prepare(checkout: Path, output: Path, evidence: Path) -> dict:
   checkout = checkout.resolve()
   task = checkout / TASK_RELATIVE_PATH
@@ -62,19 +77,24 @@ def prepare(checkout: Path, output: Path, evidence: Path) -> dict:
     raise ValueError(f"upstream ADAP task blob changed: {actual_blob}")
 
   source = task.read_text(encoding="utf-8")
-  class_count = source.count(SOURCE_CLASS)
+  class_count = identifier_count(source, SOURCE_CLASS)
   sort_count = source.count(SORT_SOURCE)
   if class_count < 3:
-    raise ValueError(f"unexpected source class occurrence count: {class_count}")
+    raise ValueError(f"unexpected source class identifier occurrence count: {class_count}")
   if sort_count != 1:
     raise ValueError(f"expected exactly one governed sort call, got {sort_count}")
-  if PROBE_CLASS in source:
-    raise ValueError("probe class name already exists in frozen source")
+  if identifier_count(source, PROBE_CLASS) != 0:
+    raise ValueError("probe class identifier already exists in frozen source")
 
-  transformed = source.replace(SOURCE_CLASS, PROBE_CLASS)
+  transformed, renamed_count = rename_identifier(source, SOURCE_CLASS, PROBE_CLASS)
+  if renamed_count != class_count:
+    raise ValueError(
+        f"mechanical class rename count changed: expected {class_count}, got {renamed_count}")
   transformed = transformed.replace(SORT_SOURCE, SORT_PROBE)
-  if SOURCE_CLASS in transformed:
-    raise ValueError("source class name remains after mechanical rename")
+  if identifier_count(transformed, SOURCE_CLASS) != 0:
+    raise ValueError("source class identifier remains after mechanical rename")
+  if identifier_count(transformed, PROBE_CLASS) != class_count:
+    raise ValueError("probe class identifier count does not match the governed rename count")
   if SORT_SOURCE in transformed:
     raise ValueError("v4 default-sort call remains after governed non-imaging mapping")
   if transformed.count(SORT_PROBE) != 1:
@@ -93,7 +113,7 @@ def prepare(checkout: Path, output: Path, evidence: Path) -> dict:
       "probe_class": PROBE_CLASS,
       "transformations": [
           {
-              "kind": "mechanical-class-rename",
+              "kind": "mechanical-java-identifier-class-rename",
               "from": SOURCE_CLASS,
               "to": PROBE_CLASS,
               "occurrences": class_count,
