@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v4",
+  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v5",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -37,6 +37,14 @@
     "io.github.mzmine.modules.io.projectload.ProjectLoadModule": {
       "classification": "project-load-application-boundary",
       "reason": "ProjectManagerImpl references ProjectLoadModule only while replacing the current project when a project file is present. The governed harness uses the default in-memory project and never loads or replaces a project. Any executable boundary must fail if project-load behavior is invoked."
+    },
+    "io.github.mzmine.modules.io.import_rawdata_all.AllSpectralDataImportModule": {
+      "classification": "documentation-only-import-boundary",
+      "reason": "ScanPointerMassList imports AllSpectralDataImportModule only for a Javadoc link describing another use of the mass-list wrapper. The ADAP task does not invoke this import module. The executable boundary is compile-only and must not provide import behavior."
+    },
+    "io.github.mzmine.modules.visualization.featurelisttable_modular.FeatureTableFX": {
+      "classification": "feature-shape-ui-type-boundary",
+      "reason": "FeatureShapeType references FeatureTableFX only as the nullable table argument of a double-click action. ADAP sets FeatureShapeType metadata but never creates a feature table or calls the UI action in the governed headless run. The executable boundary preserves type identity only."
     },
     "io.github.mzmine.modules.visualization.chromatogram.ChromatogramVisualizerModule": {
       "classification": "interactive-visualization-boundary",
