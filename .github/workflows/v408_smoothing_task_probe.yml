@@ -1,0 +1,318 @@
+name: MZmine v4.0.8 smoothing task probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "agent/v408-smoothing-parity"
+    paths:
+      - ".github/workflows/v408_smoothing_task_probe.yml"
+      - "scripts/prepare_v408_smoothing_task_probe.py"
+      - "scripts/tests/test_prepare_v408_smoothing_task_probe.py"
+      - "src/test/java/MZmineSmoothingSideAcceptanceTest.java"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_smoothing/**"
+      - "datasets/parity/v408_smoothing_source_inventory.json"
+      - "datasets/public_validation_manifest.json"
+      - "datasets/public_workflow_manifest.json"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_smoothing_task_probe.yml"
+      - "scripts/prepare_v408_smoothing_task_probe.py"
+      - "scripts/tests/test_prepare_v408_smoothing_task_probe.py"
+      - "src/test/java/MZmineSmoothingSideAcceptanceTest.java"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_smoothing/**"
+      - "datasets/parity/v408_smoothing_source_inventory.json"
+      - "datasets/public_validation_manifest.json"
+      - "datasets/public_workflow_manifest.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v408-smoothing-probe-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  direct-differential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
+      ORACLE_PATH: build/oracle/mzmine-v4.0.8
+      PROBE_SOURCE: src/test/java/io/github/mzmine/modules/dataprocessing/featdet_smoothing/V408SmoothingTaskProbe.java
+      PROBE_EVIDENCE: build/smoothing_parity/v408-smoothing-task-probe-preparation.json
+      DATA_ROOT: build/public_validation_data
+      DATASET_ID: zenodo-14001110-banane-30ngml-001
+      INPUT_FILE: build/public_validation_data/zenodo/14001110/Banane_30ngmL_001.mzML
+      INPUT_SHA256: 2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d
+      SETTINGS_DATASET_ID: zenodo-14000687-mzmine-processing-settings
+      SETTINGS_FILE: build/public_validation_data/zenodo/14000687/MZmine processing settings.xml
+      SETTINGS_SHA256: 87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c
+      CANDIDATE_SIDE_REPORT: build/smoothing_parity/open-offline-smoothing-side.json
+      ORACLE_SIDE_REPORT: build/smoothing_parity/v408-smoothing-side.json
+      DIFFERENTIAL_REPORT: build/smoothing_parity/v408-open-offline-smoothing-differential.json
+      JAVA_TOOL_OPTIONS: -Xmx5g -Djava.util.concurrent.ForkJoinPool.common.parallelism=1
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run probe preparation regression tests
+        shell: bash
+        run: python -m unittest scripts/tests/test_prepare_v408_smoothing_task_probe.py -v
+
+      - name: Set up Java 20
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Check out frozen public v4.0.8 source
+        uses: actions/checkout@v4
+        with:
+          repository: mzmine/mzmine
+          ref: 8029f930d28c0447f0acf2bcabef0a79865ad434
+          path: build/oracle/mzmine-v4.0.8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact upstream commit and prepare smoothing probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/smoothing_parity
+          test "$(git -C "${ORACLE_PATH}" rev-parse HEAD)" = "${ORACLE_COMMIT}"
+          rm -f "${PROBE_SOURCE}" "${PROBE_EVIDENCE}"
+          python scripts/prepare_v408_smoothing_task_probe.py \
+            --checkout "${ORACLE_PATH}" \
+            --output "${PROBE_SOURCE}" \
+            --evidence "${PROBE_EVIDENCE}"
+          test -s "${PROBE_SOURCE}"
+          test -s "${PROBE_EVIDENCE}"
+
+      - name: Compile candidate and frozen smoothing probe together
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew compileTestJava --no-daemon --stacktrace \
+            2>&1 | tee build/smoothing_parity/v408-smoothing-probe-compile.log
+
+      - name: Download and verify governed public mzML
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_validation_manifest.json
+          --dataset "${DATASET_ID}"
+          --output-dir "${DATA_ROOT}"
+          --timeout 180
+          --retries 3
+
+      - name: Download and verify published MZmine settings
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_workflow_manifest.json
+          --dataset "${SETTINGS_DATASET_ID}"
+          --output-dir "${DATA_ROOT}"
+          --timeout 120
+          --retries 3
+
+      - name: Verify governed bytes again
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_validation_manifest.json \
+            --dataset "${DATASET_ID}" \
+            --output-dir "${DATA_ROOT}" \
+            --verify-existing
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --dataset "${SETTINGS_DATASET_ID}" \
+            --output-dir "${DATA_ROOT}" \
+            --verify-existing
+
+      - name: Execute open-offline smoothing side in isolated JVM
+        id: candidate_side
+        continue-on-error: true
+        shell: bash
+        env:
+          MZMINE_SMOOTHING_PARITY_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
+          MZMINE_SMOOTHING_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
+          MZMINE_SMOOTHING_PARITY_SIDE: candidate
+          MZMINE_SMOOTHING_PARITY_SIDE_OUTPUT: ${{ github.workspace }}/${{ env.CANDIDATE_SIDE_REPORT }}
+          MZMINE_SMOOTHING_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
+          MZMINE_SMOOTHING_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
+          MZMINE_SMOOTHING_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          rm -rf build/test-results/test build/reports/tests/test
+          ./gradlew test \
+            --tests MZmineSmoothingSideAcceptanceTest \
+            --no-daemon --stacktrace \
+            2>&1 | tee build/smoothing_parity/open-offline-smoothing-side.log
+          code=${PIPESTATUS[0]}
+          if [[ -f build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml ]]; then
+            cp build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml \
+              build/smoothing_parity/open-offline-smoothing-side-junit.xml
+          fi
+          exit "${code}"
+
+      - name: Execute frozen v4.0.8 smoothing side in isolated JVM
+        id: oracle_side
+        continue-on-error: true
+        shell: bash
+        env:
+          MZMINE_SMOOTHING_PARITY_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
+          MZMINE_SMOOTHING_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
+          MZMINE_SMOOTHING_PARITY_SIDE: oracle
+          MZMINE_SMOOTHING_PARITY_SIDE_OUTPUT: ${{ github.workspace }}/${{ env.ORACLE_SIDE_REPORT }}
+          MZMINE_SMOOTHING_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
+          MZMINE_SMOOTHING_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
+          MZMINE_SMOOTHING_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          rm -rf build/test-results/test build/reports/tests/test
+          ./gradlew test \
+            --tests MZmineSmoothingSideAcceptanceTest \
+            --no-daemon --stacktrace \
+            2>&1 | tee build/smoothing_parity/v408-smoothing-side.log
+          code=${PIPESTATUS[0]}
+          if [[ -f build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml ]]; then
+            cp build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml \
+              build/smoothing_parity/v408-smoothing-side-junit.xml
+          fi
+          exit "${code}"
+
+      - name: Compare normalized smoothing side reports
+        if: always()
+        shell: bash
+        env:
+          CANDIDATE_STEP_OUTCOME: ${{ steps.candidate_side.outcome }}
+          ORACLE_STEP_OUTCOME: ${{ steps.oracle_side.outcome }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          candidate_path = Path(os.environ["CANDIDATE_SIDE_REPORT"])
+          oracle_path = Path(os.environ["ORACLE_SIDE_REPORT"])
+          output_path = Path(os.environ["DIFFERENTIAL_REPORT"])
+
+          def junit_problem(path: Path):
+            if not path.is_file():
+              return None
+            root = ET.parse(path).getroot()
+            for case in root.findall('.//testcase'):
+              problem = case.find('failure') or case.find('error')
+              if problem is not None:
+                return problem.get('message') or (problem.text or '').strip()
+            return None
+
+          missing = [name for name, path in (("candidate", candidate_path), ("oracle", oracle_path))
+                     if not path.is_file()]
+          if missing:
+            details = {
+                "missing_side_reports": missing,
+                "candidate_step_outcome": os.environ.get("CANDIDATE_STEP_OUTCOME"),
+                "oracle_step_outcome": os.environ.get("ORACLE_STEP_OUTCOME"),
+                "candidate_junit_problem": junit_problem(Path("build/smoothing_parity/open-offline-smoothing-side-junit.xml")),
+                "oracle_junit_problem": junit_problem(Path("build/smoothing_parity/v408-smoothing-side-junit.xml")),
+            }
+            raise SystemExit(json.dumps(details, sort_keys=True))
+
+          candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+          oracle = json.loads(oracle_path.read_text(encoding="utf-8"))
+          for field in (
+              "input_sha256", "published_settings_sha256", "ms1_scan_count",
+              "adap_feature_count", "pre_smoothing_records_sha256", "settings"):
+            if candidate.get(field) != oracle.get(field):
+              raise SystemExit(f"smoothing parity precondition differs for {field}")
+          if candidate.get("implementation") != "candidate" or oracle.get("implementation") != "oracle":
+            raise SystemExit("smoothing side implementation labels are invalid")
+
+          c_records = candidate["records"]
+          o_records = oracle["records"]
+          records_equal = c_records == o_records
+          first_mismatch = None
+          for index in range(min(len(c_records), len(o_records))):
+            if c_records[index] != o_records[index]:
+              first_mismatch = {"index": index, "candidate": c_records[index], "oracle": o_records[index]}
+              break
+          if first_mismatch is None and len(c_records) != len(o_records):
+            first_mismatch = {"index": min(len(c_records), len(o_records)),
+                              "candidate": None if len(c_records) <= len(o_records) else c_records[len(o_records)],
+                              "oracle": None if len(o_records) <= len(c_records) else o_records[len(c_records)]}
+
+          report = {
+              "schema_version": 1,
+              "gate_id": "mzmine-v4.0.8-smoothing-direct-differential-v1",
+              "candidate_commit": candidate["candidate_commit"],
+              "oracle_commit": oracle["oracle_commit"],
+              "input_sha256": candidate["input_sha256"],
+              "published_settings_sha256": candidate["published_settings_sha256"],
+              "ms1_scan_count": candidate["ms1_scan_count"],
+              "adap_feature_count": candidate["adap_feature_count"],
+              "pre_smoothing_records_sha256": candidate["pre_smoothing_records_sha256"],
+              "settings": candidate["settings"],
+              "candidate_feature_count": candidate["smoothed_feature_count"],
+              "oracle_feature_count": oracle["smoothed_feature_count"],
+              "candidate_records_sha256": candidate["records_sha256"],
+              "oracle_records_sha256": oracle["records_sha256"],
+              "records_equal": records_equal,
+              "first_mismatch": first_mismatch,
+          }
+          output_path.parent.mkdir(parents=True, exist_ok=True)
+          output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          report["report_sha256"] = hashlib.sha256(output_path.read_bytes()).hexdigest()
+          print(json.dumps(report, indent=2, sort_keys=True))
+          if not records_equal:
+            raise SystemExit(1)
+          PY
+
+      - name: Inspect and remove generated probe
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short -- "${PROBE_SOURCE}" | tee build/smoothing_parity/v408-smoothing-generated-status.txt
+          if [[ -f "${PROBE_SOURCE}" ]]; then
+            status="$(git status --short -- "${PROBE_SOURCE}" | cut -c1-2)"
+            if [[ "${status}" != "??" ]]; then
+              echo "Generated probe unexpectedly touched tracked source: ${status}"
+              exit 1
+            fi
+            rm -f "${PROBE_SOURCE}"
+          fi
+
+      - name: Remove downloaded public data
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "${DATA_ROOT}"
+          test ! -e "${DATA_ROOT}"
+
+      - name: Upload smoothing differential evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v408-smoothing-direct-differential-${{ github.run_id }}
+          path: |
+            build/smoothing_parity/
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
+          retention-days: 30
