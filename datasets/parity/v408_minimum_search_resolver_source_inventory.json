@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "inventory_id": "mzmine-v4.0.8-minimum-search-resolver-source-v1",
+  "schema_version": 2,
+  "inventory_id": "mzmine-v4.0.8-minimum-search-resolver-source-v2",
   "oracle": {
     "repository": "mzmine/mzmine",
     "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
@@ -10,23 +10,93 @@
     "repository": "VitorFrost/mzmine",
     "source_prefix": "src/main/java"
   },
-  "scientific_paths": [
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolver.java",
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverModule.java",
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverParameters.java",
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverTask.java",
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolver.java",
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolverModule.java",
-    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolverParameters.java"
+  "files": [
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolver.java",
+      "role": "legacy-framework-interface-not-selected-by-minimum-search",
+      "expected_relation": "reviewed-different",
+      "oracle_git_blob_sha1": "3632b54b5d3c870a9223e10a2b7dae883a9b0239",
+      "candidate_git_blob_sha1": "013f0a8299546800d3a2c9bf5a914669c8099896",
+      "review": "v4.0.8 removes legacy R-session API. Published minimum-search parameters throw from getResolver() and return a non-null Resolver from getResolver(parameters, featureList), so this interface is not selected by the governed path."
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverModule.java",
+      "role": "executed-task-factory",
+      "expected_relation": "identical",
+      "oracle_git_blob_sha1": "17cdf23da33d7c5bd4e0ac7f55b0cd506f42be4a",
+      "candidate_git_blob_sha1": "17cdf23da33d7c5bd4e0ac7f55b0cd506f42be4a"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverTask.java",
+      "role": "executed-framework-task-with-reviewed-nonexecuted-legacy-and-groupms2-differences",
+      "expected_relation": "reviewed-different",
+      "oracle_git_blob_sha1": "039446715b253b4b7c8604fcc47dcbc48f6d0e38",
+      "candidate_git_blob_sha1": "7414192bb58ca3f3acbe1e42f341624a5499b537",
+      "review": "The governed minimum-search path enters dimensionIndependentResolve on both sides. v4.0.8 removes legacy R handling and replaces GroupMS2Task with GroupMS2Processor. The differential probe must assert a non-null modern resolver and disabled published group-MS2 branch before execution."
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/GeneralResolverParameters.java",
+      "role": "executed-parameter-base-with-reviewed-legacy-r-field-difference",
+      "expected_relation": "reviewed-different",
+      "oracle_git_blob_sha1": "6524727286a2146220b98d2e94c8005568a0de3c",
+      "candidate_git_blob_sha1": "a7daac0383245b2583c925e5bdfc9e84afc50726",
+      "review": "Candidate retains the legacy RENGINE_TYPE parameter declaration; exact v4.0.8 removes it. MinimumSearchFeatureResolverParameters does not include RENGINE_TYPE in FULL or INTEGRATED parameter arrays and is byte-identical between sides."
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/Resolver.java",
+      "role": "executed-modern-resolver-interface",
+      "expected_relation": "identical",
+      "oracle_git_blob_sha1": "23984e75b2a67865b2a380323b8e772087eca0db",
+      "candidate_git_blob_sha1": "23984e75b2a67865b2a380323b8e772087eca0db"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/AbstractResolver.java",
+      "role": "executed-series-splitting-framework",
+      "expected_relation": "identical",
+      "oracle_git_blob_sha1": "72139ff7ae15b26feebaaeae9f504f2328a96ba7",
+      "candidate_git_blob_sha1": "72139ff7ae15b26feebaaeae9f504f2328a96ba7"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolver.java",
+      "role": "executed-local-minimum-scientific-algorithm",
+      "expected_relation": "identical",
+      "oracle_git_blob_sha1": "9ff6b5e6e60d02454a32dc844b8ebade983307f1",
+      "candidate_git_blob_sha1": "9ff6b5e6e60d02454a32dc844b8ebade983307f1"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolverModule.java",
+      "role": "executed-module-identity",
+      "expected_relation": "identical",
+      "oracle_git_blob_sha1": "f33566dcda6b5467d7add5dbd9087d114a8fa509",
+      "candidate_git_blob_sha1": "f33566dcda6b5467d7add5dbd9087d114a8fa509"
+    },
+    {
+      "path": "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolverParameters.java",
+      "role": "executed-published-parameter-contract",
+      "expected_relation": "identical",
+      "oracle_git_blob_sha1": "365e2f1effad71e2475f3702f59a5fb4ff684e49",
+      "candidate_git_blob_sha1": "365e2f1effad71e2475f3702f59a5fb4ff684e49",
+      "review": "FULL and INTEGRATED arrays are identical and getResolver(parameters, featureList) returns new MinimumSearchFeatureResolver(parameters, featureList); legacy getResolver() throws UnsupportedOperationException."
+    }
   ],
+  "governed_path": {
+    "dimension": "RETENTION_TIME",
+    "legacy_feature_resolver_selected": false,
+    "modern_resolver_required": "io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolver",
+    "group_ms2_must_be_disabled_for_this_gate": true,
+    "pre_resolver_records_sha256": "fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2"
+  },
   "policy": {
     "oracle_commit_must_match": true,
     "all_paths_must_exist_on_both_sides": true,
-    "all_governed_scientific_blobs_must_be_identical": true,
-    "source_identity_is_not_behavioral_parity": true
+    "all_observed_blob_ids_must_match_frozen_inventory": true,
+    "identical_expectations_must_remain_identical": true,
+    "reviewed_differences_must_remain_exactly_the_frozen_blob_pair": true,
+    "source_identity_is_not_behavioral_parity": true,
+    "direct_differential_required": true
   },
   "direct_gate": {
-    "status": "source-audit-pending",
+    "status": "source-contract-frozen-direct-comparison-pending",
     "upstream_state": "governed equivalent post-Savitzky-Golay smoothing state",
     "published_settings_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c"
   }
