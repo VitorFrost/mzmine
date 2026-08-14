@@ -15,9 +15,26 @@ on:
       - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
       - "datasets/public_validation_manifest.json"
       - "datasets/public_workflow_manifest.json"
+  pull_request:
+    branches:
+      - "open-offline-main"
+    paths:
+      - ".github/workflows/v408_adap_task_probe.yml"
+      - "scripts/prepare_v408_adap_task_probe.py"
+      - "scripts/tests/test_prepare_v408_adap_task_probe.py"
+      - "scripts/fetch_public_test_data.py"
+      - "src/test/java/MZmineAdapChromatogramSideAcceptanceTest.java"
+      - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
+      - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
+      - "datasets/public_validation_manifest.json"
+      - "datasets/public_workflow_manifest.json"
 
 permissions:
   contents: read
+
+concurrency:
+  group: v408-adap-task-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   direct-differential:
