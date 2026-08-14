@@ -12,7 +12,7 @@
   },
   "package": "io/github/mzmine/modules/dataprocessing/featdet_smoothing",
   "parameter_set_version": 1,
-  "classification": "direct-differential-pending",
+  "classification": "Equivalent",
   "files": [
     {"path":"SmoothingAlgorithm.java","oracle_sha1":"c26a032cb6c6ed0ef0fd35b1e2700b2c6b42328e","candidate_sha1":"c26a032cb6c6ed0ef0fd35b1e2700b2c6b42328e","classification":"identical-scientific-core"},
     {"path":"SmoothingModule.java","oracle_sha1":"9d297cd70688b379fd691da87e88663a6f13b343","candidate_sha1":"9d297cd70688b379fd691da87e88663a6f13b343","classification":"identical-scientific-core"},
@@ -33,6 +33,22 @@
     "dataset_id": "zenodo-14001110-banane-30ngml-001",
     "upstream_state": "governed equivalent MS1 centroid plus governed equivalent ADAP output",
     "settings_source": "published MZmine processing settings XML",
-    "status": "producer-pending"
+    "status": "complete",
+    "accepted_evidence": "datasets/parity/v408_smoothing_accepted_evidence.json"
+  },
+  "direct_evidence": {
+    "workflow_run_id": 31814860815,
+    "artifact_id": 9224679187,
+    "artifact_zip_sha256": "676191a22491899832d7426eef2ed2ca1b4ae29fd03c88c38a8a7d7b05fe98c9",
+    "candidate_commit": "56393a7571681bd1fcf5397eb48a1634398ff9c7",
+    "adap_input_feature_count": 517,
+    "adap_input_records_sha256": "a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa",
+    "candidate_output_feature_count": 517,
+    "oracle_output_feature_count": 517,
+    "candidate_records_sha256": "1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971",
+    "oracle_records_sha256": "1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971",
+    "records_equal": true,
+    "first_mismatch": null,
+    "numerical_tolerance_applied": false
   }
 }
