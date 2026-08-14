@@ -10,6 +10,14 @@ The governed chain is:
 
 The three upstream stages already have direct accepted v4.0.8 evidence. Smoothing is evaluated independently in fresh candidate/oracle JVMs so downstream evidence cannot depend on shared mutable object state.
 
+## Evidence source-of-truth rule
+
+The primary evidence for this gate is the retained machine-readable GitHub Actions artifact from run `31814860815`, artifact ID `9224679187`. Its extracted immutable values are frozen in:
+
+`datasets/parity/v408_smoothing_accepted_evidence.json`
+
+Human-maintained prose is secondary to that machine-readable record. F-046 documents why this precedence is necessary: an earlier version of this document transcribed two hashes incorrectly after the successful run even though the candidate/oracle scientific reports were exactly equal.
+
 ## Frozen provenance
 
 ### Public oracle
@@ -32,6 +40,7 @@ The three upstream stages already have direct accepted v4.0.8 evidence. Smoothin
 - settings SHA-256: `87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c`;
 - smoothing algorithm: `io.github.mzmine.modules.dataprocessing.featdet_smoothing.savitzkygolay.SavitzkyGolaySmoothing`;
 - algorithm ParameterSet: `io.github.mzmine.modules.dataprocessing.featdet_smoothing.savitzkygolay.SavitzkyGolayParameters`;
+- ParameterSet version: `1`;
 - original feature list handling: `KEEP`;
 - suffix: `sm`.
 
@@ -118,10 +127,15 @@ Dedicated workflow run:
 
 `31814860815`
 
+Accepted candidate commit:
+
+`56393a7571681bd1fcf5397eb48a1634398ff9c7`
+
 Artifact:
 
 - artifact ID: `9224679187`;
-- ZIP SHA-256: `6763461911a7a22d04754f29a85601e99a0ecc19ed721e888734cf9f569d7b2a`.
+- artifact name: `v408-smoothing-direct-differential-31814860815`;
+- ZIP SHA-256 re-derived from the retained downloaded artifact: `676191a22491899832d7426eef2ed2ca1b4ae29fd03c88c38a8a7d7b05fe98c9`.
 
 ### Upstream-state equality
 
@@ -134,18 +148,26 @@ Artifact:
 
 - candidate output feature count: `517`;
 - oracle output feature count: `517`;
-- candidate normalized output SHA-256: `fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2`;
-- oracle normalized output SHA-256: `fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2`;
+- candidate normalized output SHA-256: `1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971`;
+- oracle normalized output SHA-256: `1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971`;
 - `records_equal: true`;
-- `first_mismatch: null`.
+- `first_mismatch: null`;
+- numerical tolerance applied: `false`.
 
 The result therefore demonstrates exact equality of the governed normalized post-smoothing scientific state, including the complete feature-series hashes.
 
-## Failure history
+## Failure history and F-046 erratum
 
-The first scientific differential run itself passed. No F-ID was allocated for scientific or runtime behavior.
+The scientific differential itself passed. No scientific mismatch was observed.
 
-After the successful run, the first repository update intended to freeze the evidence used a stale file SHA and GitHub rejected it with HTTP 409. That infrastructure/governance event is F-034. It changed no repository content and did not affect the accepted scientific artifact. The correction fetched fresh repository content/SHA before replaying the metadata promotion.
+F-034 records the historical smoothing source-closure/governance work, including a duplicate historical label for a stale optimistic-lock write. Neither changed the scientific output.
+
+F-046 records a separate and later governance defect discovered while constructing the local-minimum resolver gate. The retained run artifact was re-inspected and showed that the earlier post-run prose had transcribed:
+
+- the output-record SHA as `fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2`, although both artifact side reports contain `1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971`;
+- the artifact ZIP SHA as `6763461911a7a22d04754f29a85601e99a0ecc19ed721e888734cf9f569d7b2a`, although the retained ZIP hashes to `676191a22491899832d7426eef2ed2ca1b4ae29fd03c88c38a8a7d7b05fe98c9`.
+
+No scientific file changed between accepted-run commit `56393a757...` and the later smoothing head that introduced the prose record. The correction therefore changes governance only; it does not rerun, repair, or reinterpret the smoothing algorithm.
 
 ## What this proves
 
@@ -178,4 +200,4 @@ This result does not establish parity for:
 
 The next direct stage is the **local-minimum feature resolver**.
 
-It must start from the now-governed exact post-smoothing state, freeze the exact v4.0.8 resolver task/parameter mapping, compare resolved feature boundaries and complete series, and retain all differences before any repair.
+It must start from the corrected artifact-derived post-smoothing state: 517 records with normalized SHA-256 `1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971`. Resolver candidate/oracle execution is not considered to have started until both sides independently reproduce that precondition.
