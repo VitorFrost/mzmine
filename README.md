@@ -53,12 +53,14 @@ on `agent/v408-chromatogram-feature-parity`: that branch contains a frozen ADAP 
 fail-closed source-closure/task-probe work, governed public real-data differential acceptance
 scaffolding, and explicit CI failure evidence.
 
-This branch is **not integrated parity evidence yet**. The F-025 head passed the general Open Offline
-CI, but dedicated ADAP task-probe run `31810440392` failed at the direct differential after source
-preparation, compilation, governed mzML verification, and settings verification had passed. A later
-branch commit adjusted worker heap and launched another task-probe run. Until the strict/governed
-scientific comparison passes, all new failures are globally registered, regressions are green, and
-the result is merged, ADAP remains **Adapted** with direct differential evidence incomplete.
+This branch is **not integrated parity evidence yet**. Dedicated ADAP task-probe runs have reached the
+full-size direct differential after source preparation, compilation, governed mzML verification, and
+settings verification, but the differential still does not complete under the previously tested
+worker-memory envelope. Memory-focused changes — releasing the completed candidate feature list
+before the frozen probe and increasing only the test-worker heap — are being validated under
+canonical failure record F-032. Until the strict/governed scientific comparison passes, all new
+failures are globally registered, regressions are green, and the result is merged, ADAP remains
+**Adapted** with direct differential evidence incomplete.
 
 After ADAP, the planned single-file sequence is smoothing, local-minimum resolving, and isotope
 grouping, followed by the multi-file alignment/filter/gap-filling/duplicate sequence.
