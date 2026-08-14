@@ -31,8 +31,8 @@ If a collision is found later, **do not delete or silently rewrite the original 
 the initial timestamp/content, assign the colliding record the next free canonical identifier, and
 record the alias/correction history in both locations.
 
-As of the reconciliation on **2026-08-14**, identifiers through `F-031` are allocated. The next
-identifier is `F-032` **only if a fresh repository-wide check confirms that no parallel branch has
+As of the reconciliation on **2026-08-14**, identifiers through `F-032` are allocated. The next
+identifier is `F-033` **only if a fresh repository-wide check confirms that no parallel branch has
 allocated it in the meantime**.
 
 ## Canonical allocation table
@@ -70,45 +70,50 @@ allocated it in the meantime**.
 | F-029 | ADAP final feature-list ordering/renumbering differs between 3.9-line candidate and v4.0.8 task | Observed/source-classified; row identity/order must remain visible in the direct differential and must not be normalized away |
 | F-030 | Global failure-index placeholder was accidentally created directly on `open-offline-main` | **Validated as corrected**: original placeholder commit `85be47cdbab026422639683ff1ad8165a6d2a1c3`; correction `4b936b95e6eb4584343e879b73a9ea28db6b32a2` replaced it in place after the failure/proposal record |
 | F-031 | Accidental `docs/development/NOOP` file created while attempting branch-based follow-up work | **Validated as corrected**: original commit `3ef791d8769bff662a120390b3190d6fccad11ad`; cleanup commit `89f1d36f118998fd10b7d8918e1c08a770ddb723` removed only the accidental file after the failure/proposal record |
+| F-032 | Full-size ADAP direct differential exhausts the test-worker heap | Active validation. Historical ADAP branch alias was `F-026`, which collides with canonical F-026. Candidate snapshot/release and heap increase `3g -> 5g` are execution-only proposals/changes; parity remains unaccepted until the dedicated probe completes and strict scientific differences are inspected |
 
 ## Active ADAP note
 
 The branch `agent/v408-chromatogram-feature-parity` is active and may move independently of merged
-documentation work. At the 2026-08-14 documentation check it had progressed beyond F-025 and
-contained:
+documentation work. It contains:
 
 - a frozen ADAP source inventory;
 - fail-closed source-closure work;
 - a compiled frozen v4.0.8 ADAP task probe;
 - a governed public real-data differential acceptance test;
 - explicit failure exposure in CI;
-- a subsequent worker-heap change after the F-025 run reached the direct differential and failed.
+- memory-focused follow-up after the direct differential reached full-size execution.
 
 The F-025 head `603332159e00cdd96afc3a2f5dadba13d7b53335` passed the general Open Offline
-CI, but dedicated ADAP task-probe run `31810440392` failed specifically at `Execute direct ADAP
-differential on public LC-MS` after source preparation, compilation, governed mzML download/hash
-verification, settings download/hash verification, and pre-execution checks had passed. A later branch
-head changed worker heap and started a new task-probe execution. This is **work in progress**, not
-integrated evidence.
+CI, but dedicated ADAP task-probe run `31810440392` failed at `Execute direct ADAP differential on
+public LC-MS`. Head `bd4559bd53b583f0b0f1771a88a62979c0033c65` then ran with an explicit
+3 GiB worker heap and also failed at the direct differential in run `31810967773`, while all source,
+compile, input, settings, evidence-upload, and cleanup stages succeeded. The branch then released the
+candidate feature list before the frozen probe and raised the worker heap from 3 GiB to 5 GiB at
+`f3ad7f1a59c1feeb01d97bc2bf7ddad4dfc96e47`; that head's dedicated probe is the active validation
+for canonical F-032.
 
-ADAP remains `Adapted` with `direct_differential_complete = false` until the strict/governed
-scientific comparison is accepted, all subsequent failures are globally registered, regressions are
-green, and the result is merged into `open-offline-main`.
+This is **work in progress**, not integrated evidence. ADAP remains `Adapted` with
+`direct_differential_complete = false` until the strict/governed scientific comparison is accepted,
+all subsequent failures are globally registered, regressions are green, and the result is merged into
+`open-offline-main`.
 
 ## Governance lesson from the 2026-08-14 reconciliation
 
 Issue #27, issue #50, PR #51, and the independent ADAP branch were progressing concurrently. That
 allowed F-IDs to be reused for unrelated observations before the collision was noticed. The colliding
-issue records were reassigned while retaining their original text/history:
+records were reassigned while retaining their original text/history:
 
 - the stale parity-policy test record is canonical `F-026`;
 - the CI concurrency record is canonical `F-027`;
 - the issue #50 parameter-class record is canonical `F-028`;
-- the issue #50 ordering/renumbering record is canonical `F-029`.
+- the issue #50 ordering/renumbering record is canonical `F-029`;
+- the ADAP heap-exhaustion event historically called `F-026` on the parallel branch is canonical
+  `F-032`.
 
-F-030 and F-031 then demonstrated a second governance lesson: even documentation-only operations
-must obey the focused-branch workflow and use the correct GitHub action for the intended resource.
-Both mistakes were recorded before their corrective mutations; neither changed scientific state.
+F-030 and F-031 demonstrated a second governance lesson: even documentation-only operations must obey
+the focused-branch workflow and use the correct GitHub action for the intended resource. Both
+mistakes were recorded before their corrective mutations; neither changed scientific state.
 
 Future work must treat this file as a repository-global allocation lock in documentation form. A
 machine-enforced uniqueness check is recommended before the 4.0 release candidate.
