@@ -22,6 +22,7 @@ jobs:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
       REPORT: oracle/v408-executable/evidence/v408-adap-source-closure.json
+      AUDIT_LOG: oracle/v408-executable/evidence/v408-adap-source-closure.log
     steps:
       - name: Check out candidate harness
         uses: actions/checkout@v4
@@ -56,19 +57,26 @@ jobs:
         id: closure
         shell: bash
         run: |
+          set -o pipefail
+          mkdir -p "$(dirname "${REPORT}")"
+          rm -f "${REPORT}" "${AUDIT_LOG}"
           set +e
           python scripts/audit_v408_source_closure.py \
             --checkout "${ORACLE_PATH}" \
             --manifest datasets/parity/v408_adap_source_closure_manifest.json \
             --output "${REPORT}" \
-            --require-commit
-          code=$?
+            --require-commit 2>&1 | tee "${AUDIT_LOG}"
+          code=${PIPESTATUS[0]}
+          set -e
           echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
-          test -f "${REPORT}"
+          echo "report_exists=$([[ -f "${REPORT}" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Summarize and enforce closure
         shell: bash
+        env:
+          AUDIT_EXIT_CODE: ${{ steps.closure.outputs.exit_code }}
+          REPORT_EXISTS: ${{ steps.closure.outputs.report_exists }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -76,9 +84,30 @@ jobs:
           import os
           from pathlib import Path
 
-          p = Path("oracle/v408-executable/evidence/v408-adap-source-closure.json")
-          report = json.loads(p.read_text(encoding="utf-8"))
+          report_path = Path(os.environ["REPORT"])
+          log_path = Path(os.environ["AUDIT_LOG"])
+          audit_exit = int(os.environ["AUDIT_EXIT_CODE"])
+          report_exists = os.environ.get("REPORT_EXISTS") == "true" and report_path.is_file()
+
+          def command_escape(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+
+          if not report_exists:
+              log = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else "audit produced no log"
+              tail = "\n".join(log.strip().splitlines()[-20:])
+              message = f"auditor refused before writing fresh evidence (exit={audit_exit}): {tail}"
+              print(f"::error title=F-023 ADAP source closure audit refusal::{command_escape(message)}")
+              if step_summary:
+                  with Path(step_summary).open("a", encoding="utf-8") as handle:
+                      handle.write("## F-023 — ADAP source closure audit refusal\n\n")
+                      handle.write(f"Audit exit code: `{audit_exit}`\n\n```text\n{tail}\n```\n")
+              raise SystemExit(message)
+
+          report = json.loads(report_path.read_text(encoding="utf-8"))
           summary = {
+              "audit_exit_code": audit_exit,
               "status": report["status"],
               "summary": report["summary"],
               "violations": report["violations"],
@@ -86,17 +115,13 @@ jobs:
           }
           print(json.dumps(summary, indent=2, sort_keys=True))
 
-          def command_escape(value: str) -> str:
-              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
           for violation in report["violations"]:
               print(f"::error title=F-023 ADAP source closure::{command_escape(violation)}")
 
-          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if step_summary:
               with Path(step_summary).open("a", encoding="utf-8") as handle:
                   handle.write("## F-023 — ADAP source closure\n\n")
-                  handle.write(f"Status: `{report['status']}`\n\n")
+                  handle.write(f"Audit exit code: `{audit_exit}`  \nStatus: `{report['status']}`\n\n")
                   handle.write("```json\n")
                   handle.write(json.dumps(report["summary"], indent=2, sort_keys=True))
                   handle.write("\n```\n\n")
@@ -105,16 +130,17 @@ jobs:
                       for violation in report["violations"]:
                           handle.write(f"- `{violation}`\n")
 
-          if report["status"] != "pass" or report["violations"]:
-              raise SystemExit("ADAP source closure has unresolved or prohibited dependencies")
+          if audit_exit != 0 or report["status"] != "pass" or report["violations"]:
+              raise SystemExit("ADAP source closure has unresolved/prohibited dependencies or the auditor refused")
           PY
-          test "${{ steps.closure.outputs.exit_code }}" = "0"
 
       - name: Upload closure evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v408-adap-source-closure-${{ github.run_id }}
-          path: oracle/v408-executable/evidence/v408-adap-source-closure.json
-          if-no-files-found: error
+          path: |
+            oracle/v408-executable/evidence/v408-adap-source-closure.json
+            oracle/v408-executable/evidence/v408-adap-source-closure.log
+          if-no-files-found: warn
           retention-days: 30
