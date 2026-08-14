@@ -22,6 +22,7 @@
 
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,7 @@ import io.github.mzmine.datamodel.DataPoint;
 import io.github.mzmine.datamodel.MZmineProject;
 import io.github.mzmine.datamodel.RawDataFile;
 import io.github.mzmine.datamodel.Scan;
+import io.github.mzmine.datamodel.featuredata.FeatureDataUtils;
 import io.github.mzmine.datamodel.features.Feature;
 import io.github.mzmine.datamodel.features.FeatureList;
 import io.github.mzmine.datamodel.features.FeatureListRow;
@@ -41,6 +43,10 @@ import io.github.mzmine.main.MZmineCore;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ADAPChromatogramBuilderParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderModule;
 import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderTask;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.GeneralResolverParameters;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.ResolvingDimension;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolver;
+import io.github.mzmine.modules.dataprocessing.featdet_chromatogramdeconvolution.minimumsearch.MinimumSearchFeatureResolverParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionParameters;
 import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector;
@@ -60,7 +66,6 @@ import io.github.mzmine.util.MemoryMapStorage;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -149,11 +154,22 @@ class MZmineMinimumSearchResolverSideAcceptanceTest {
         "Resolver gate did not start from the accepted post-smoothing state");
 
     ParameterSet resolverParameters = loadPublishedResolverParameters(settings);
-    Object resolver = Class.forName(RESOLVER_CLASS).getDeclaredConstructor().newInstance();
+    assertInstanceOf(MinimumSearchFeatureResolverParameters.class, resolverParameters);
+    GeneralResolverParameters generalResolverParameters =
+        (GeneralResolverParameters) resolverParameters;
+    assertEquals(ResolvingDimension.RETENTION_TIME,
+        resolverParameters.getValue(GeneralResolverParameters.dimension));
+    assertFalse(resolverParameters.getParameter(GeneralResolverParameters.groupMS2Parameters)
+        .getValue(), "Governed resolver gate must keep group-MS2 disabled");
+    Object selectedResolver = generalResolverParameters.getResolver(resolverParameters, smoothed);
+    assertNotNull(selectedResolver, "Published minimum-search parameters must select modern Resolver");
+    assertInstanceOf(MinimumSearchFeatureResolver.class, selectedResolver);
+    assertEquals(RESOLVER_CLASS, selectedResolver.getClass().getName());
+
     Class<?> taskClass = Class.forName(side.equals("candidate") ? CANDIDATE_TASK_CLASS
         : ORACLE_TASK_CLASS);
     List<FeatureList> before = new ArrayList<>(project.getCurrentFeatureLists());
-    Task task = instantiateResolverTask(taskClass, resolver, project, smoothed,
+    Task task = instantiateResolverTask(taskClass, project, smoothed,
         resolverParameters.cloneParameterSet(true));
     task.run();
     assertEquals(TaskStatus.FINISHED, task.getStatus(), task::getErrorMessage);
@@ -161,8 +177,8 @@ class MZmineMinimumSearchResolverSideAcceptanceTest {
     List<Map<String, Object>> records = snapshot(resolved, raw, smoothed);
 
     Map<String, Object> report = new LinkedHashMap<>();
-    report.put("schema_version", 1);
-    report.put("gate_id", "mzmine-v4.0.8-minimum-search-resolver-side-report-v1");
+    report.put("schema_version", 2);
+    report.put("gate_id", "mzmine-v4.0.8-minimum-search-resolver-side-report-v2");
     report.put("implementation", side);
     report.put("candidate_commit", requireEnvironment("MZMINE_RESOLVER_PARITY_CANDIDATE_COMMIT"));
     report.put("oracle_commit", "8029f930d28c0447f0acf2bcabef0a79865ad434");
@@ -170,9 +186,13 @@ class MZmineMinimumSearchResolverSideAcceptanceTest {
     report.put("published_settings_sha256", sha256(settings));
     report.put("pre_resolver_feature_count", smoothedRecords.size());
     report.put("pre_resolver_records_sha256", smoothedSha);
-    report.put("resolver_class", resolver.getClass().getName());
+    report.put("resolver_class", selectedResolver.getClass().getName());
     report.put("resolver_parameters_class", resolverParameters.getClass().getName());
     report.put("resolver_parameters_sha256", sha256(canonicalParameters(resolverParameters)));
+    report.put("resolving_dimension", resolverParameters.getValue(GeneralResolverParameters.dimension)
+        .toString());
+    report.put("group_ms2_enabled",
+        resolverParameters.getParameter(GeneralResolverParameters.groupMS2Parameters).getValue());
     report.put("output_feature_count", records.size());
     report.put("output_records_sha256", sha256(JSON.writeValueAsString(records)));
     report.put("records", records);
@@ -183,40 +203,15 @@ class MZmineMinimumSearchResolverSideAcceptanceTest {
     assertTrue(Files.isRegularFile(output));
   }
 
-  private static Task instantiateResolverTask(Class<?> taskClass, Object resolver,
-      MZmineProject project, ModularFeatureList input, ParameterSet parameters) throws Exception {
-    List<String> rejected = new ArrayList<>();
-    for (Constructor<?> constructor : taskClass.getDeclaredConstructors()) {
-      Class<?>[] types = constructor.getParameterTypes();
-      Object[] args = new Object[types.length];
-      boolean supported = true;
-      for (int index = 0; index < types.length; index++) {
-        Class<?> type = types[index];
-        if (type.isInstance(project)) args[index] = project;
-        else if (type.isInstance(input)) args[index] = input;
-        else if (type.isInstance(resolver)) args[index] = resolver;
-        else if (ParameterSet.class.isAssignableFrom(type)) args[index] = parameters;
-        else if (MemoryMapStorage.class.isAssignableFrom(type)) args[index] = null;
-        else if (Instant.class.isAssignableFrom(type)) args[index] = Instant.EPOCH;
-        else if (Class.class.isAssignableFrom(type)) {
-          args[index] = Class.forName(RESOLVER_MODULE_CLASS);
-        } else {
-          supported = false;
-          rejected.add(constructor + " unsupported parameter " + type.getName());
-          break;
-        }
-      }
-      if (!supported) continue;
-      constructor.setAccessible(true);
-      try {
-        Object value = constructor.newInstance(args);
-        if (value instanceof Task task) return task;
-      } catch (InvocationTargetException error) {
-        if (error.getCause() instanceof Exception exception) throw exception;
-        throw error;
-      }
-    }
-    throw new IllegalStateException("No supported FeatureResolverTask constructor. " + rejected);
+  private static Task instantiateResolverTask(Class<?> taskClass, MZmineProject project,
+      ModularFeatureList input, ParameterSet parameters) throws Exception {
+    Constructor<?> constructor = taskClass.getDeclaredConstructor(MZmineProject.class,
+        MemoryMapStorage.class, FeatureList.class, ParameterSet.class,
+        io.github.mzmine.util.maths.CenterFunction.class, Instant.class);
+    constructor.setAccessible(true);
+    Object value = constructor.newInstance(project, null, input, parameters,
+        FeatureDataUtils.DEFAULT_CENTER_FUNCTION, Instant.EPOCH);
+    return assertInstanceOf(Task.class, value);
   }
 
   private static String canonicalParameters(ParameterSet parameters) throws Exception {
