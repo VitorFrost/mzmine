@@ -142,10 +142,17 @@ class MZmineAdapChromatogramDifferentialAcceptanceTest {
     ADAPChromatogramBuilderParameters parameters = loadPublishedAdapParameters(settings, rawDataFile);
     Map<String, Object> settingsRecord = governedSettings(parameters);
 
-    FeatureList candidateList = runCandidate(project, rawDataFile, parameters.cloneParameterSet(true));
-    List<Map<String, Object>> candidateRecords = snapshot(candidateList, rawDataFile);
-    project.removeFeatureList(candidateList);
-    assertEquals(0, project.getNumberOfFeatureLists(), "Candidate feature list cleanup failed");
+    List<Map<String, Object>> candidateRecords;
+    {
+      FeatureList candidateList = runCandidate(project, rawDataFile,
+          parameters.cloneParameterSet(true));
+      candidateRecords = snapshot(candidateList, rawDataFile);
+      project.removeFeatureList(candidateList);
+      assertEquals(0, project.getNumberOfFeatureLists(), "Candidate feature list cleanup failed");
+    }
+    // The governed fixture is intentionally full-sized. Drop the first feature list before the
+    // second implementation allocates its all-data-point working array; this changes no science.
+    System.gc();
 
     FeatureList oracleList = runProbe(probeClass, project, rawDataFile,
         parameters.cloneParameterSet(true));
