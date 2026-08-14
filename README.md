@@ -48,17 +48,24 @@ support for proprietary account, licensing, cloud, or vendor-restricted infrastr
 
 ### Active scientific gate
 
-The next direct v4.0.8 gate is **ADAP Chromatogram Builder** (issue #50). It starts from the already
-validated import/centroid output, freezes the v4.0.8 parameter and source mapping, emits normalized
-chromatogram membership/point-series records, and records every new discrepancy through the
-failure-first `F-xxx` process before any corrective implementation.
+The active direct v4.0.8 gate is **ADAP Chromatogram Builder** (issue #50). Work is already underway
+on `agent/v408-chromatogram-feature-parity`: that branch contains a frozen ADAP source inventory,
+fail-closed source-closure/task-probe work, governed public real-data differential acceptance
+scaffolding, and explicit CI failure evidence.
+
+This branch is **not integrated parity evidence yet**. The F-025 head passed the general Open Offline
+CI, but dedicated ADAP task-probe run `31810440392` failed at the direct differential after source
+preparation, compilation, governed mzML verification, and settings verification had passed. A later
+branch commit adjusted worker heap and launched another task-probe run. Until the strict/governed
+scientific comparison passes, all new failures are globally registered, regressions are green, and
+the result is merged, ADAP remains **Adapted** with direct differential evidence incomplete.
 
 After ADAP, the planned single-file sequence is smoothing, local-minimum resolving, and isotope
 grouping, followed by the multi-file alignment/filter/gap-filling/duplicate sequence.
 
 ### Still required before a 4.0-derived release
 
-- direct v4.0.8 parity evidence for ADAP and all downstream declared scientific stages;
+- accepted direct v4.0.8 parity evidence for ADAP and all downstream declared scientific stages;
 - broader mzML conformance, including profile, positive, mixed-polarity, binary encoding, and richer
   precursor/MSn metadata;
 - a second public workflow with meaningful feature-to-MS2 association and spectral-library matching
@@ -84,6 +91,8 @@ See:
   — manual MS1/MS2 source-data selection and its scientific boundary;
 - [`docs/milestones/MILESTONE_4_0_CORE_PARITY.md`](docs/milestones/MILESTONE_4_0_CORE_PARITY.md) —
   active implementation sequence;
+- [`docs/development/FAILURE_ID_INDEX.md`](docs/development/FAILURE_ID_INDEX.md) — repository-global
+  `F-xxx` allocation and current failure/evidence boundary;
 - [`docs/public_validation/DATASETS.md`](docs/public_validation/DATASETS.md) — governed public corpus.
 
 ## Branch strategy
@@ -170,7 +179,8 @@ Where later public source depends on unavailable proprietary services, contribut
 3. classify the capability as out of scope.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the required provenance, failure-first, and validation
-process.
+process. Before allocating any new failure ID, also check the repository-global
+[`FAILURE_ID_INDEX.md`](docs/development/FAILURE_ID_INDEX.md).
 
 ## License and attribution
 
