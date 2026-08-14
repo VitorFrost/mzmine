@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "inventory_id": "mzmine-v4.0.8-minimum-search-resolver-source-v1",
+  "oracle": {
+    "repository": "mzmine/mzmine",
+    "commit": "8029f930d28c0447f0acf2bcabef0a79865ad434",
+    "source_prefix": "mzmine-community/src/main/java"
+  },
+  "candidate": {
+    "repository": "VitorFrost/mzmine",
+    "source_prefix": "src/main/java"
+  },
+  "scientific_paths": [
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolver.java",
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverModule.java",
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverParameters.java",
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/FeatureResolverTask.java",
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolver.java",
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolverModule.java",
+    "io/github/mzmine/modules/dataprocessing/featdet_chromatogramdeconvolution/minimumsearch/MinimumSearchFeatureResolverParameters.java"
+  ],
+  "policy": {
+    "oracle_commit_must_match": true,
+    "all_paths_must_exist_on_both_sides": true,
+    "all_governed_scientific_blobs_must_be_identical": true,
+    "source_identity_is_not_behavioral_parity": true
+  },
+  "direct_gate": {
+    "status": "source-audit-pending",
+    "upstream_state": "governed equivalent post-Savitzky-Golay smoothing state",
+    "published_settings_sha256": "87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c"
+  }
+}
