@@ -19,7 +19,7 @@ Before assigning a new identifier:
 
 If a collision is found later, preserve the original evidence, reassign the colliding record to the next unused canonical identifier, and record the alias/correction history.
 
-As of the 2026-08-14 smoothing parity work, identifiers through **F-034** are allocated. The next candidate is **F-035**, only after a fresh repository-wide check confirms that no parallel work has allocated it.
+As of the 2026-08-14 smoothing parity work, identifiers through **F-036** are allocated. The next candidate is **F-037**, only after a fresh repository-wide check confirms that no parallel work has allocated it.
 
 ## Canonical allocation table
 
@@ -58,7 +58,9 @@ As of the 2026-08-14 smoothing parity work, identifiers through **F-034** are al
 | F-031 | Accidental `docs/development/NOOP` file created directly on `open-offline-main` | **Validated as corrected** by commit `89f1d36f118998fd10b7d8918e1c08a770ddb723`; only the accidental file was removed |
 | F-032 | Superseded duplicate ADAP harness test introduced undeclared Python `jsonschema` dependency | **Resolved on superseded branch; not merged**. Test made dependency-neutral and duplicate PR #52 closed |
 | F-033 | Governed ADAP differential exhausted heap when candidate and v4.0.8 oracle ran sequentially in one JVM | **Validated as resolved** by independent candidate/oracle JVM producers; direct run `31812225494` completed with 517/517 exact normalized records and identical record SHA-256 |
-| F-034 | Smoothing source closure escaped into unrelated import/task-controller graph and hit unresolved `AllSpectralDataImportMainTask -> ThreadPoolTask` | **Open**. Run `31814946367` retained; correction must identify and bound the non-executed application/import path rather than adding importer/thread-pool behavior blindly |
+| F-034 | Smoothing source closure escaped into unrelated import/task-controller graph through Javadoc-only imports and hit unresolved `AllSpectralDataImportMainTask -> ThreadPoolTask` | **Validated as resolved** by boundaries on the two documentation-only imports from `ScanPointerMassList`; run `31815418661` passed with 1,165 reachable types, 0 unresolved internal references and 0 violations; no importer/thread-pool behavior added |
+| F-035 | Smoothing side-report materialized the complete post-smoothing point series as nested boxed maps/lists and exhausted a 5 GiB heap | **Open**. Run `31815165022`, artifact `9224867628`; retained JUnit shows OOM in `completeSeries()`/`detailedSnapshot()` after scientific task execution. Planned correction is streaming lossless canonical point sidecars + hashes, not dropping evidence or raising tolerances |
+| F-036 | Failing smoothing side step exits under bash `-e -o pipefail` before copying side-specific JUnit evidence | **Open**. Run `31815165022`; candidate/oracle negative-path JUnit copies were not preserved as intended. Planned correction explicitly captures pipeline exit under `set +e`, restores `set -e`, copies JUnit, then returns the original code |
 
 ## ADAP parity consequence
 
@@ -75,8 +77,10 @@ The same-JVM OOM remains relevant evidence for the later memory/lifecycle releas
 
 ## Smoothing parity note
 
-F-034 is a source-closure/provenance failure, not evidence of a smoothing algorithm difference. The independent source inventory shows the governed smoothing task, parameter set, module, algorithm interface, Savitzky-Golay implementation/parameters, LOESS implementation/parameters, and zero-handling type are byte-identical between candidate and frozen v4.0.8. The closure must still be narrowed/reviewed before that source identity can support the direct differential.
+F-034 was a source-closure/provenance failure, not evidence of a smoothing algorithm difference. Its correction bounded two exact Javadoc-only import edges and reduced the closure without importing unrelated execution behavior. The independent source inventory continues to show the governed smoothing task, parameter set, module, algorithm interface, Savitzky-Golay implementation/parameters, LOESS implementation/parameters, and zero-handling type are byte-identical between candidate and frozen v4.0.8.
+
+F-035 and F-036 are now the active harness/evidence failures. Neither is a scientific mismatch: the first is caused by the in-memory representation chosen by the test-side serializer; the second weakens negative-path artifact retention. Both must be corrected before the first scientific smoothing comparison can be interpreted.
 
 ## Governance lessons
 
-Parallel issue/branch work caused several historical ID collisions. The canonical reconciliations are retained rather than erased. Future work must consult this file and active branch/issue history before allocating F-035 or later IDs. A machine-enforced uniqueness gate remains recommended before the 4.0 release candidate.
+Parallel issue/branch work caused several historical ID collisions. The canonical reconciliations are retained rather than erased. Future work must consult this file and active branch/issue history before allocating F-037 or later IDs. A machine-enforced uniqueness gate remains recommended before the 4.0 release candidate.
