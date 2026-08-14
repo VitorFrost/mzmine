@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/VitorFrost/mzmine/datasets/parity/adap_chromatogram_stage_report.schema.json",
+  "title": "Normalized MZmine ADAP chromatogram differential report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "producer", "input", "settings", "stage"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "producer": {"$ref": "#/$defs/producer"},
+    "input": {"$ref": "#/$defs/input"},
+    "settings": {"$ref": "#/$defs/settings"},
+    "stage": {"$ref": "#/$defs/stage"}
+  },
+  "$defs": {
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository", "ref", "commit", "application_version", "java_version",
+        "operating_system", "thread_count", "command"
+      ],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "ref": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "application_version": {"type": "string", "minLength": 1},
+        "java_version": {"type": "string", "minLength": 1},
+        "operating_system": {"type": "string", "minLength": 1},
+        "thread_count": {"type": "integer", "minimum": 1},
+        "command": {
+          "type": "array", "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "relative_path", "size_bytes", "sha256"],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "relative_path": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mapping_id", "sha256"],
+      "properties": {
+        "mapping_id": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage_name", "record_key", "key_contract", "records", "summary"],
+      "properties": {
+        "stage_name": {"const": "adap_chromatogram_builder"},
+        "record_key": {"const": "chromatogram_key"},
+        "key_contract": {"const": "source-scan-key-and-source-mz-sha256-v1"},
+        "records": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/chromatogramRecord"}
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["record_count", "total_point_count"],
+          "properties": {
+            "record_count": {"type": "integer", "minimum": 0},
+            "total_point_count": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "chromatogramRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chromatogram_key", "row_id", "row_order", "source_scan_keys",
+        "source_scan_numbers", "point_count", "representative_mz",
+        "rt_start_minutes", "rt_end_minutes", "apex_rt_minutes", "height",
+        "area", "status", "point_series"
+      ],
+      "properties": {
+        "chromatogram_key": {
+          "type": "string",
+          "pattern": "^adap:[0-9a-f]{64}$"
+        },
+        "row_id": {"type": "integer", "minimum": 1},
+        "row_order": {"type": "integer", "minimum": 0},
+        "source_scan_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "source_scan_numbers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "point_count": {"type": "integer", "minimum": 1},
+        "representative_mz": {"type": "number"},
+        "rt_start_minutes": {"type": "number"},
+        "rt_end_minutes": {"type": "number"},
+        "apex_rt_minutes": {"type": ["number", "null"]},
+        "height": {"type": ["number", "null"]},
+        "area": {"type": ["number", "null"]},
+        "status": {"type": "string", "minLength": 1},
+        "point_series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/point"}
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "scan_key", "scan_number", "rt_minutes", "mz", "intensity"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "scan_key": {"type": "string", "minLength": 1},
+        "scan_number": {"type": "integer", "minimum": 0},
+        "rt_minutes": {"type": "number"},
+        "mz": {"type": "number"},
+        "intensity": {"type": "number"}
+      }
+    }
+  }
+}
