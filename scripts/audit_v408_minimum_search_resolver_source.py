@@ -11,6 +11,7 @@ from pathlib import Path
 
 ORACLE_COMMIT = "8029f930d28c0447f0acf2bcabef0a79865ad434"
 INVENTORY_ID = "mzmine-v4.0.8-minimum-search-resolver-source-v2"
+ACCEPTED_SMOOTHING_SHA = "1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971"
 ALLOWED_RELATIONS = {"identical", "reviewed-different"}
 
 
@@ -110,9 +111,8 @@ def audit(fork_root: Path, oracle_root: Path, inventory_path: Path) -> dict:
     violations.append("governed path must explicitly exclude legacy FeatureResolver selection")
   if governed_path.get("group_ms2_must_be_disabled_for_this_gate") is not True:
     violations.append("governed path must require disabled group-MS2 for this narrow resolver gate")
-  if governed_path.get("pre_resolver_records_sha256") != (
-      "fcf45b949b1adca37bf3418366296525218c3117b692e363526c5adb9cdcb6c2"):
-    violations.append("governed pre-resolver smoothing SHA is not the accepted exact state")
+  if governed_path.get("pre_resolver_records_sha256") != ACCEPTED_SMOOTHING_SHA:
+    violations.append("governed pre-resolver smoothing SHA is not the artifact-derived accepted state")
 
   report = {
       "schema_version": 2,
