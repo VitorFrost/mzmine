@@ -55,12 +55,13 @@ scaffolding, and explicit CI failure evidence.
 
 This branch is **not integrated parity evidence yet**. Dedicated ADAP task-probe runs have reached the
 full-size direct differential after source preparation, compilation, governed mzML verification, and
-settings verification, but the differential still does not complete under the previously tested
-worker-memory envelope. Memory-focused changes — releasing the completed candidate feature list
-before the frozen probe and increasing only the test-worker heap — are being validated under
-canonical failure record F-032. Until the strict/governed scientific comparison passes, all new
-failures are globally registered, regressions are green, and the result is merged, ADAP remains
-**Adapted** with direct differential evidence incomplete.
+settings verification. Releasing the completed candidate feature list before the frozen probe and
+increasing the test-worker heap from 3 GiB to 5 GiB did **not** make the governed differential
+complete: run `31811608229` still failed in the direct-differential step and produced no normalized
+differential report. The execution problem remains open under canonical failure record F-032. Until
+the strict/governed scientific comparison passes, all new failures are globally registered,
+regressions are green, and the result is merged, ADAP remains **Adapted** with direct differential
+evidence incomplete.
 
 After ADAP, the planned single-file sequence is smoothing, local-minimum resolving, and isotope
 grouping, followed by the multi-file alignment/filter/gap-filling/duplicate sequence.
