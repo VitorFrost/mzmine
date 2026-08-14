@@ -10,7 +10,7 @@ on:
       - "scripts/prepare_v408_adap_task_probe.py"
       - "scripts/tests/test_prepare_v408_adap_task_probe.py"
       - "scripts/fetch_public_test_data.py"
-      - "src/test/java/MZmineAdapChromatogramDifferentialAcceptanceTest.java"
+      - "src/test/java/MZmineAdapChromatogramSideAcceptanceTest.java"
       - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
       - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
       - "datasets/public_validation_manifest.json"
@@ -36,6 +36,8 @@ jobs:
       SETTINGS_DATASET_ID: zenodo-14000687-mzmine-processing-settings
       SETTINGS_FILE: build/public_validation_data/zenodo/14000687/MZmine processing settings.xml
       SETTINGS_SHA256: 87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c
+      CANDIDATE_SIDE_REPORT: build/adap_parity/open-offline-adap-side.json
+      ORACLE_SIDE_REPORT: build/adap_parity/v408-adap-side.json
       DIFFERENTIAL_REPORT: build/adap_parity/v408-open-offline-adap-differential.json
       JAVA_TOOL_OPTIONS: -Xmx5g -Djava.util.concurrent.ForkJoinPool.common.parallelism=1
     steps:
@@ -134,106 +136,166 @@ jobs:
             --output-dir "${DATA_ROOT}" \
             --verify-existing
 
-      - name: Execute direct ADAP differential on public LC-MS
+      - name: Execute open-offline ADAP side in isolated JVM
+        id: candidate_side
+        continue-on-error: true
         shell: bash
         env:
           MZMINE_ADAP_PARITY_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
           MZMINE_ADAP_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
-          MZMINE_ADAP_PARITY_OUTPUT: ${{ github.workspace }}/${{ env.DIFFERENTIAL_REPORT }}
+          MZMINE_ADAP_PARITY_SIDE: candidate
+          MZMINE_ADAP_PARITY_SIDE_OUTPUT: ${{ github.workspace }}/${{ env.CANDIDATE_SIDE_REPORT }}
           MZMINE_ADAP_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
           MZMINE_ADAP_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
           MZMINE_ADAP_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -o pipefail
+          rm -rf build/test-results/test build/reports/tests/test
           ./gradlew test \
-            --tests MZmineAdapChromatogramDifferentialAcceptanceTest \
-            --rerun-tasks --no-daemon --stacktrace \
-            2>&1 | tee build/adap_parity/v408-adap-direct-differential.log
+            --tests MZmineAdapChromatogramSideAcceptanceTest \
+            --no-daemon --stacktrace \
+            2>&1 | tee build/adap_parity/open-offline-adap-side.log
+          code=${PIPESTATUS[0]}
+          if [[ -f build/test-results/test/TEST-MZmineAdapChromatogramSideAcceptanceTest.xml ]]; then
+            cp build/test-results/test/TEST-MZmineAdapChromatogramSideAcceptanceTest.xml \
+              build/adap_parity/open-offline-adap-side-junit.xml
+          fi
+          exit "${code}"
 
-      - name: Expose JUnit differential failure
+      - name: Execute frozen v4.0.8 ADAP side in isolated JVM
+        id: oracle_side
+        continue-on-error: true
+        shell: bash
+        env:
+          MZMINE_ADAP_PARITY_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
+          MZMINE_ADAP_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
+          MZMINE_ADAP_PARITY_SIDE: oracle
+          MZMINE_ADAP_PARITY_SIDE_OUTPUT: ${{ github.workspace }}/${{ env.ORACLE_SIDE_REPORT }}
+          MZMINE_ADAP_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
+          MZMINE_ADAP_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
+          MZMINE_ADAP_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          rm -rf build/test-results/test build/reports/tests/test
+          ./gradlew test \
+            --tests MZmineAdapChromatogramSideAcceptanceTest \
+            --no-daemon --stacktrace \
+            2>&1 | tee build/adap_parity/v408-adap-side.log
+          code=${PIPESTATUS[0]}
+          if [[ -f build/test-results/test/TEST-MZmineAdapChromatogramSideAcceptanceTest.xml ]]; then
+            cp build/test-results/test/TEST-MZmineAdapChromatogramSideAcceptanceTest.xml \
+              build/adap_parity/v408-adap-side-junit.xml
+          fi
+          exit "${code}"
+
+      - name: Compare normalized ADAP side reports
         if: always()
         shell: bash
+        env:
+          CANDIDATE_STEP_OUTCOME: ${{ steps.candidate_side.outcome }}
+          ORACLE_STEP_OUTCOME: ${{ steps.oracle_side.outcome }}
         run: |
           python - <<'PY'
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-
-          def esc(value: str) -> str:
-              return value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-
-          files = sorted(Path('build/test-results/test').glob('TEST-*MZmineAdapChromatogramDifferentialAcceptanceTest*.xml'))
-          if not files:
-              print('::notice title=ADAP JUnit diagnostics::No acceptance-test XML was produced')
-          for path in files:
-              root = ET.parse(path).getroot()
-              print(f"::notice title=ADAP JUnit result::{esc(path.name)} tests={root.get('tests')} failures={root.get('failures')} errors={root.get('errors')} skipped={root.get('skipped')}")
-              for case in root.findall('.//testcase'):
-                  failure = case.find('failure')
-                  error = case.find('error')
-                  problem = failure if failure is not None else error
-                  if problem is None:
-                      continue
-                  message = problem.get('message') or problem.text or 'JUnit failure without message'
-                  text = (problem.text or '').strip()
-                  tail = '\n'.join(text.splitlines()[-20:]) if text else ''
-                  detail = f"{case.get('classname')}.{case.get('name')}: {message}"
-                  if tail:
-                      detail += f"\n{tail}"
-                  print(f"::error title=F-025 ADAP differential JUnit::{esc(detail)}")
-          PY
-
-      - name: Summarize differential evidence
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f "${DIFFERENTIAL_REPORT}" ]]; then
-            python - <<'PY'
           import hashlib
           import json
           import os
+          import sys
+          import xml.etree.ElementTree as ET
           from pathlib import Path
+
+          candidate_path = Path(os.environ["CANDIDATE_SIDE_REPORT"])
+          oracle_path = Path(os.environ["ORACLE_SIDE_REPORT"])
+          differential_path = Path(os.environ["DIFFERENTIAL_REPORT"])
 
           def esc(value: str) -> str:
               return value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
 
-          path = Path(os.environ["DIFFERENTIAL_REPORT"])
-          report = json.loads(path.read_text(encoding="utf-8"))
-          summary = {
-              "report_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-              "candidate_commit": report.get("candidate_commit"),
-              "oracle_commit": report.get("oracle_commit"),
-              "input_sha256": report.get("input_sha256"),
-              "published_settings_sha256": report.get("published_settings_sha256"),
-              "ms1_scan_count": report.get("ms1_scan_count"),
-              "settings": report.get("settings"),
-              "candidate_feature_count": report.get("candidate_feature_count"),
-              "oracle_feature_count": report.get("oracle_feature_count"),
-              "candidate_records_sha256": report.get("candidate_records_sha256"),
-              "oracle_records_sha256": report.get("oracle_records_sha256"),
-              "records_equal": report.get("records_equal"),
-          }
-          compact = json.dumps(summary, sort_keys=True, separators=(',', ':'))
-          print(json.dumps(summary, indent=2, sort_keys=True))
-          print(f"::notice title=ADAP differential evidence::{esc(compact)}")
-          if report.get("records_equal") is False:
-              mismatch = {
-                  "candidate_feature_count": report.get("candidate_feature_count"),
-                  "oracle_feature_count": report.get("oracle_feature_count"),
-                  "candidate_records_sha256": report.get("candidate_records_sha256"),
-                  "oracle_records_sha256": report.get("oracle_records_sha256"),
+          def junit_problem(path: Path) -> str | None:
+              if not path.is_file():
+                  return None
+              root = ET.parse(path).getroot()
+              for case in root.findall('.//testcase'):
+                  problem = case.find('failure') or case.find('error')
+                  if problem is not None:
+                      return problem.get('message') or (problem.text or '').strip()
+              return None
+
+          missing = []
+          if not candidate_path.is_file():
+              missing.append("candidate")
+          if not oracle_path.is_file():
+              missing.append("oracle")
+          if missing:
+              details = {
+                  "missing_side_reports": missing,
+                  "candidate_step_outcome": os.environ.get("CANDIDATE_STEP_OUTCOME"),
+                  "oracle_step_outcome": os.environ.get("ORACLE_STEP_OUTCOME"),
+                  "candidate_junit_problem": junit_problem(Path("build/adap_parity/open-offline-adap-side-junit.xml")),
+                  "oracle_junit_problem": junit_problem(Path("build/adap_parity/v408-adap-side-junit.xml")),
               }
-              print(f"::error title=F-025 ADAP scientific mismatch::{esc(json.dumps(mismatch, sort_keys=True))}")
-          step = os.environ.get("GITHUB_STEP_SUMMARY")
-          if step:
-              with Path(step).open("a", encoding="utf-8") as handle:
+              print(f"::error title=F-026 ADAP isolated-side execution::{esc(json.dumps(details, sort_keys=True))}")
+              raise SystemExit(json.dumps(details, sort_keys=True))
+
+          candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+          oracle = json.loads(oracle_path.read_text(encoding="utf-8"))
+          for field in ("input_sha256", "published_settings_sha256", "ms1_scan_count", "settings"):
+              if candidate.get(field) != oracle.get(field):
+                  raise SystemExit(f"F-025 parity harness precondition differs for {field}")
+          if candidate.get("implementation") != "candidate" or oracle.get("implementation") != "oracle":
+              raise SystemExit("F-025 side report implementation labels are invalid")
+
+          candidate_records = candidate["records"]
+          oracle_records = oracle["records"]
+          records_equal = candidate_records == oracle_records
+          first_mismatch = None
+          for index in range(min(len(candidate_records), len(oracle_records))):
+              if candidate_records[index] != oracle_records[index]:
+                  first_mismatch = {
+                      "index": index,
+                      "candidate": candidate_records[index],
+                      "oracle": oracle_records[index],
+                  }
+                  break
+          if first_mismatch is None and len(candidate_records) != len(oracle_records):
+              first_mismatch = {
+                  "index": min(len(candidate_records), len(oracle_records)),
+                  "candidate": None if len(candidate_records) <= len(oracle_records) else candidate_records[len(oracle_records)],
+                  "oracle": None if len(oracle_records) <= len(candidate_records) else oracle_records[len(candidate_records)],
+              }
+
+          report = {
+              "schema_version": 1,
+              "gate_id": "mzmine-v4.0.8-adap-chromatogram-direct-differential-v2",
+              "candidate_commit": candidate["candidate_commit"],
+              "oracle_commit": oracle["oracle_commit"],
+              "input_sha256": candidate["input_sha256"],
+              "published_settings_sha256": candidate["published_settings_sha256"],
+              "ms1_scan_count": candidate["ms1_scan_count"],
+              "settings": candidate["settings"],
+              "candidate_feature_count": candidate["feature_count"],
+              "oracle_feature_count": oracle["feature_count"],
+              "candidate_records_sha256": candidate["records_sha256"],
+              "oracle_records_sha256": oracle["records_sha256"],
+              "records_equal": records_equal,
+              "first_mismatch": first_mismatch,
+          }
+          differential_path.parent.mkdir(parents=True, exist_ok=True)
+          differential_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          report["report_sha256"] = hashlib.sha256(differential_path.read_bytes()).hexdigest()
+          print(json.dumps(report, indent=2, sort_keys=True))
+          print(f"::notice title=ADAP differential evidence::{esc(json.dumps(report, sort_keys=True))}")
+
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              with Path(step_summary).open("a", encoding="utf-8") as handle:
                   handle.write("## v4.0.8 ADAP direct differential\n\n```json\n")
-                  handle.write(json.dumps(summary, indent=2, sort_keys=True))
+                  handle.write(json.dumps(report, indent=2, sort_keys=True))
                   handle.write("\n```\n")
+
+          if not records_equal:
+              print(f"::error title=F-025 ADAP scientific mismatch::{esc(json.dumps(report, sort_keys=True))}")
+              sys.exit(1)
           PY
-          else
-            echo "::notice title=ADAP differential evidence::No normalized differential report was produced before the test failed"
-          fi
 
       - name: Inspect and remove generated probe
         if: always()
