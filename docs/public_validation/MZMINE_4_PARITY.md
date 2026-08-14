@@ -16,7 +16,18 @@ Excluded from the current parity claim are proprietary account/licensing/cloud i
 
 ROI-MCR remains a separate fork-local experimental LC-MS track and is never evidence for this Milestone 4 target.
 
-**Current active scientific gate: feature smoothing.**
+**Current active scientific gate: local-minimum feature resolver.**
+
+## Evidence hierarchy
+
+Scientific claims follow this precedence:
+
+1. retained machine-readable CI artifact/reports;
+2. committed machine-readable evidence registry and parity inventories;
+3. generated/validated documentation;
+4. human summaries and issue/PR prose.
+
+F-046 was introduced after a successful smoothing run was transcribed with incorrect hashes in later prose. The primary artifact remained internally consistent. The committed evidence registry now prevents that later prose from silently becoming the scientific source of truth.
 
 ## Established direct v4.0.8 evidence
 
@@ -38,8 +49,6 @@ Complete evidence: `docs/public_validation/V408_IMPORT_MASS_DETECTION_PARITY.md`
 
 ### 2. ADAP Chromatogram Builder — Equivalent for the governed non-imaging LC-MS path
 
-The first downstream direct differential now also passes against the exact v4.0.8 ADAP task.
-
 Governed scope:
 
 - exact `Banane_30ngmL_001.mzML` bytes;
@@ -55,15 +64,36 @@ Direct result from workflow run `31812225494`:
 - published ADAP settings: 8 consecutive scans, 50,000 minimum consecutive-scan intensity, 100,000 minimum absolute height, `0.001 m/z or 5.0 ppm` scan-to-scan tolerance;
 - 517 feature/chromatogram records on both sides;
 - candidate normalized-record SHA-256 `a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa`;
-- oracle normalized-record SHA-256 `a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa`;
+- oracle normalized-record SHA-256 identical;
 - `records_equal: true`;
 - `first_mismatch: null`.
-
-The normalized record covers row order/ID, m/z, RT, height, area, representative scan, RT/m/z/intensity ranges, scan count, complete-series hash, and deterministic sampled points.
 
 The earlier same-JVM heap exhaustion was a harness lifecycle failure. Process isolation resolved it without changing ADAP production code or broadening scientific tolerances.
 
 Complete evidence: `docs/public_validation/V408_ADAP_CHROMATOGRAM_PARITY.md`.
+
+### 3. Feature smoothing — Equivalent for the published Savitzky-Golay path
+
+The governed headless/scientific smoothing source set is byte-identical between open-offline and exact v4.0.8, including `SmoothingTask`, `SmoothingParameters`, and the Savitzky-Golay implementation/parameters. Source identity remains supporting provenance; the stage was also executed directly.
+
+Accepted direct run `31814860815`, retained artifact `9224679187`:
+
+- candidate ADAP input: 517 records;
+- oracle ADAP input: 517 records;
+- upstream normalized SHA-256 `a6275eb15ce967e999374818803cc8b41c77a3e916d9f5196572caaf6e7d57fa` on both sides;
+- candidate smoothing output: 517 records;
+- oracle smoothing output: 517 records;
+- candidate normalized-output SHA-256 `1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971`;
+- oracle normalized-output SHA-256 identical;
+- `records_equal: true`;
+- `first_mismatch: null`;
+- no numerical tolerance applied.
+
+The retained artifact ZIP SHA-256 is `676191a22491899832d7426eef2ed2ca1b4ae29fd03c88c38a8a7d7b05fe98c9`.
+
+Machine-readable accepted evidence: `datasets/parity/v408_smoothing_accepted_evidence.json`.
+
+Complete narrative evidence and F-046 erratum: `docs/public_validation/V408_SMOOTHING_PARITY.md`.
 
 ## Public 3.x workflow regression baseline
 
@@ -94,8 +124,8 @@ This proves robust 3.x compatibility; only stages with direct v4.0.8 differentia
 | Import | Explicit MS1/MS2 metadata/source selection | **Equivalent** | Direct MS1/MS2 comparison |
 | Processing | Centroid mass detection, noise 0.0 | **Equivalent** | Direct per-scan MS1/MS2 comparison |
 | Processing | ADAP chromatogram builder, governed non-imaging published-settings path | **Equivalent** | 517 exact normalized records; direct v4.0.8 gate |
-| Processing | Smoothing | Adapted | **Next direct gate:** freeze parameters/source path and compare point series |
-| Processing | Local-minimum resolver | Adapted | Differential after smoothing |
+| Processing | Published Savitzky-Golay smoothing | **Equivalent** | 517 exact normalized records; accepted artifact-derived SHA `1c8fb4…ec971` |
+| Processing | Local-minimum resolver | Adapted | **Next direct gate:** compare boundaries and complete resolved series from accepted smoothing state |
 | Processing | Isotope finder | Adapted | Differential after resolved features |
 | Processing | Join alignment | Adapted | Blank + two-replicate multi-file differential |
 | Processing | Rows filter | Adapted | Compare each rule decision and retained/removed identity |
@@ -113,7 +143,7 @@ This proves robust 3.x compatibility; only stages with direct v4.0.8 differentia
 | Packaging | Portable Windows/Linux artifacts | Not implemented | Release gate |
 | Supply chain | Fully offline clean build | Not implemented | Separate dependency-freezing/SBOM gate |
 
-The machine-readable source of truth is `datasets/parity/mzmine_v408_lcms_core_inventory.json`.
+The machine-readable source of truth is `datasets/parity/mzmine_v408_lcms_core_inventory.json`. Stage-specific retained smoothing evidence is frozen separately in `datasets/parity/v408_smoothing_accepted_evidence.json`.
 
 ## Differential methodology
 
@@ -127,7 +157,8 @@ Every stage must:
 6. retain all strict differences;
 7. use only predeclared, field-specific tolerances with independent justification;
 8. register every newly discovered runtime/representation/scientific failure as `F-xxx` before correction;
-9. promote a capability only after the direct gate passes.
+9. promote a capability only after the direct gate passes;
+10. derive promoted evidence identifiers from retained machine-readable artifacts rather than manually retyping them into prose.
 
 The ADAP work added an important lifecycle rule: large candidate/oracle feature-processing stages should use independent producer processes when keeping both object graphs alive in one JVM changes memory viability.
 
@@ -138,9 +169,11 @@ The ADAP work added an important lifecycle rule: large candidate/oracle feature-
 - [x] import;
 - [x] centroid mass detection;
 - [x] ADAP chromatogram building;
-- [ ] smoothing;
+- [x] published Savitzky-Golay smoothing;
 - [ ] local-minimum resolver;
 - [ ] isotope grouping.
+
+The resolver gate must start from exactly 517 post-smoothing records with artifact-derived normalized SHA-256 `1c8fb4b82356facdbff4b88174990dcdf307b665df5ddddd30363cde471ec971`. Earlier resolver runs that stopped on the superseded `fcf45b…` assertion did not execute the resolver and provide no candidate/oracle behavioral verdict.
 
 ### Gate 3B — multi-file processing
 
