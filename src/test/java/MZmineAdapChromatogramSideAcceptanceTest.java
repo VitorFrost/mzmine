@@ -1,0 +1,403 @@
+/*
+ * Copyright (c) 2026 Contributors to the open offline fork
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import static java.util.concurrent.TimeUnit.MINUTES;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.google.common.collect.Range;
+import io.github.mzmine.datamodel.DataPoint;
+import io.github.mzmine.datamodel.MZmineProject;
+import io.github.mzmine.datamodel.RawDataFile;
+import io.github.mzmine.datamodel.Scan;
+import io.github.mzmine.datamodel.features.Feature;
+import io.github.mzmine.datamodel.features.FeatureList;
+import io.github.mzmine.datamodel.features.FeatureListRow;
+import io.github.mzmine.main.MZmineCore;
+import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ADAPChromatogramBuilderParameters;
+import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderModule;
+import io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder.ModularADAPChromatogramBuilderTask;
+import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionModule;
+import io.github.mzmine.modules.dataprocessing.featdet_massdetection.MassDetectionParameters;
+import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetector;
+import io.github.mzmine.modules.dataprocessing.featdet_massdetection.centroid.CentroidMassDetectorParameters;
+import io.github.mzmine.modules.impl.MZmineProcessingStepImpl;
+import io.github.mzmine.modules.io.import_rawdata_all.AllSpectralDataImportModule;
+import io.github.mzmine.modules.io.import_rawdata_all.AllSpectralDataImportParameters;
+import io.github.mzmine.modules.io.import_spectral_library.SpectralLibraryImportParameters;
+import io.github.mzmine.parameters.ParameterSet;
+import io.github.mzmine.parameters.parametertypes.selectors.RawDataFilesSelection;
+import io.github.mzmine.parameters.parametertypes.selectors.ScanSelection;
+import io.github.mzmine.taskcontrol.Task;
+import io.github.mzmine.taskcontrol.TaskStatus;
+import io.github.mzmine.util.MemoryMapStorage;
+import java.io.File;
+import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
+/**
+ * Produces one normalized side of the governed ADAP differential in a dedicated test JVM.
+ *
+ * <p>The workflow runs this test twice in separate Gradle test workers: once for the candidate and
+ * once for the frozen v4.0.8 probe. A Python gate compares the two side reports. This isolation is
+ * required because the full public fixture needs a large temporary all-data-point array and keeping
+ * both feature lists alive in one JVM can exhaust memory without indicating a scientific mismatch.</p>
+ */
+class MZmineAdapChromatogramSideAcceptanceTest {
+
+  private static final String PROBE_CLASS =
+      "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder."
+          + "V408ModularADAPChromatogramBuilderTaskProbe";
+  private static final String ADAP_MODULE_CLASS =
+      "io.github.mzmine.modules.dataprocessing.featdet_adapchromatogrambuilder."
+          + "ModularADAPChromatogramBuilderModule";
+  private static final ObjectMapper JSON = new ObjectMapper()
+      .enable(SerializationFeature.INDENT_OUTPUT)
+      .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS);
+
+  @AfterEach
+  void cleanProject() {
+    MZmineTestUtil.cleanProject();
+  }
+
+  @Test
+  @Timeout(value = 20, unit = MINUTES)
+  void producesOneGovernedAdapParitySide() throws Exception {
+    Map<String, String> environment = System.getenv();
+    String inputValue = environment.get("MZMINE_ADAP_PARITY_INPUT");
+    String settingsValue = environment.get("MZMINE_ADAP_PARITY_SETTINGS");
+    String outputValue = environment.get("MZMINE_ADAP_PARITY_SIDE_OUTPUT");
+    String side = environment.get("MZMINE_ADAP_PARITY_SIDE");
+    Assumptions.assumeTrue(
+        inputValue != null && settingsValue != null && outputValue != null && side != null,
+        "Governed ADAP side-report inputs were not supplied");
+    assertTrue(side.equals("candidate") || side.equals("oracle"),
+        "Side must be exactly candidate or oracle");
+
+    Path input = Path.of(inputValue).toAbsolutePath().normalize();
+    Path settings = Path.of(settingsValue).toAbsolutePath().normalize();
+    Path output = Path.of(outputValue).toAbsolutePath().normalize();
+    assertTrue(Files.isRegularFile(input), "Governed mzML is missing");
+    assertTrue(Files.isRegularFile(settings), "Published MZmine settings XML is missing");
+    verifyHash(input, requireEnvironment("MZMINE_ADAP_PARITY_INPUT_SHA256"));
+    verifyHash(settings, requireEnvironment("MZMINE_ADAP_PARITY_SETTINGS_SHA256"));
+
+    Class<?> probeClass = null;
+    if (side.equals("oracle")) {
+      probeClass = Class.forName(PROBE_CLASS);
+      assertTrue(Task.class.isAssignableFrom(probeClass),
+          "Frozen v4.0.8 probe must implement Task");
+    }
+
+    MZmineTestUtil.cleanProject();
+    importMzml(input);
+    MZmineProject project = MZmineCore.getProjectManager().getCurrentProject();
+    assertEquals(1, project.getCurrentRawDataFiles().size(), "Exactly one raw file must be imported");
+    RawDataFile rawDataFile = project.getCurrentRawDataFiles().get(0);
+    runCentroidMassDetection(rawDataFile);
+
+    long ms1Scans = rawDataFile.getScans().stream().filter(scan -> scan.getMSLevel() == 1).count();
+    long ms1MassLists = rawDataFile.getScans().stream()
+        .filter(scan -> scan.getMSLevel() == 1 && scan.getMassList() != null).count();
+    assertTrue(ms1Scans > 0, "Governed file has no MS1 scans");
+    assertEquals(ms1Scans, ms1MassLists,
+        "Every MS1 scan must have the same centroid mass-list input");
+
+    ADAPChromatogramBuilderParameters parameters = loadPublishedAdapParameters(settings, rawDataFile);
+    FeatureList featureList = side.equals("candidate")
+        ? runCandidate(project, rawDataFile, parameters.cloneParameterSet(true))
+        : runProbe(probeClass, project, rawDataFile, parameters.cloneParameterSet(true));
+    List<Map<String, Object>> records = snapshot(featureList, rawDataFile);
+
+    Map<String, Object> report = new LinkedHashMap<>();
+    report.put("schema_version", 1);
+    report.put("gate_id", "mzmine-v4.0.8-adap-chromatogram-side-report-v1");
+    report.put("implementation", side);
+    report.put("candidate_commit", requireEnvironment("MZMINE_ADAP_PARITY_CANDIDATE_COMMIT"));
+    report.put("oracle_commit", "8029f930d28c0447f0acf2bcabef0a79865ad434");
+    report.put("input_sha256", sha256(input));
+    report.put("published_settings_sha256", sha256(settings));
+    report.put("ms1_scan_count", ms1Scans);
+    report.put("settings", governedSettings(parameters));
+    report.put("feature_count", records.size());
+    report.put("records_sha256", sha256(JSON.writeValueAsString(records)));
+    report.put("records", records);
+
+    Path parent = output.getParent();
+    if (parent != null) {
+      Files.createDirectories(parent);
+    }
+    JSON.writeValue(output.toFile(), report);
+    assertTrue(Files.isRegularFile(output), "ADAP side report was not written");
+  }
+
+  private static void importMzml(Path input) throws InterruptedException {
+    ParameterSet parameters = MZmineCore.getConfiguration()
+        .getModuleParameters(AllSpectralDataImportModule.class).cloneParameterSet();
+    parameters.setParameter(AllSpectralDataImportParameters.fileNames, new File[]{input.toFile()});
+    parameters.setParameter(AllSpectralDataImportParameters.advancedImport, false);
+    parameters.setParameter(SpectralLibraryImportParameters.dataBaseFiles, new File[0]);
+    assertEquals(TaskResult.FINISHED,
+        MZmineTestUtil.callModuleWithTimeout(10, MINUTES, AllSpectralDataImportModule.class,
+            parameters), "mzML import did not finish successfully");
+  }
+
+  private static void runCentroidMassDetection(RawDataFile rawDataFile)
+      throws InterruptedException {
+    ParameterSet parameters = MZmineCore.getConfiguration()
+        .getModuleParameters(MassDetectionModule.class).cloneParameterSet();
+    ParameterSet centroidParameters = new CentroidMassDetectorParameters();
+    centroidParameters.setParameter(CentroidMassDetectorParameters.noiseLevel, 0d);
+    centroidParameters.setParameter(CentroidMassDetectorParameters.detectIsotopes, false);
+    parameters.setParameter(MassDetectionParameters.massDetector,
+        new MZmineProcessingStepImpl<>(new CentroidMassDetector(), centroidParameters));
+    parameters.setParameter(MassDetectionParameters.dataFiles,
+        new RawDataFilesSelection(new RawDataFile[]{rawDataFile}));
+    parameters.setParameter(MassDetectionParameters.scanSelection, new ScanSelection(1));
+    parameters.setParameter(MassDetectionParameters.denormalizeMSnScans, false);
+    parameters.setParameter(MassDetectionParameters.outFilenameOption, false);
+    assertInstanceOf(CentroidMassDetector.class,
+        parameters.getValue(MassDetectionParameters.massDetector).getModule());
+    assertEquals(TaskResult.FINISHED,
+        MZmineTestUtil.callModuleWithTimeout(10, MINUTES, MassDetectionModule.class, parameters),
+        "MS1 centroid mass detection did not finish successfully");
+  }
+
+  private static ADAPChromatogramBuilderParameters loadPublishedAdapParameters(Path settings,
+      RawDataFile rawDataFile) throws Exception {
+    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+    factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+    factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+    factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+    factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+    setOptionalJaxpAttribute(factory, XMLConstants.ACCESS_EXTERNAL_DTD, "");
+    setOptionalJaxpAttribute(factory, XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+    factory.setXIncludeAware(false);
+    factory.setExpandEntityReferences(false);
+    Document document = factory.newDocumentBuilder().parse(settings.toFile());
+
+    Element step = null;
+    NodeList steps = document.getDocumentElement().getElementsByTagName("batchstep");
+    for (int index = 0; index < steps.getLength(); index++) {
+      Element candidate = (Element) steps.item(index);
+      if (ADAP_MODULE_CLASS.equals(candidate.getAttribute("method"))) {
+        if (step != null) {
+          throw new IllegalStateException("Published workflow contains duplicate ADAP steps");
+        }
+        step = candidate;
+      }
+    }
+    assertNotNull(step, "Published workflow does not contain the ADAP chromatogram builder");
+
+    ADAPChromatogramBuilderParameters parameters = new ADAPChromatogramBuilderParameters();
+    parameters.loadValuesFromXML(step);
+    parameters.setParameter(ADAPChromatogramBuilderParameters.dataFiles,
+        new RawDataFilesSelection(new RawDataFile[]{rawDataFile}));
+    parameters.setParameter(ADAPChromatogramBuilderParameters.scanSelection, new ScanSelection(1));
+    parameters.setParameter(ADAPChromatogramBuilderParameters.suffix, "parity-chromatograms");
+    assertNotNull(parameters.getValue(ADAPChromatogramBuilderParameters.minHighestPoint),
+        "Published Minimum absolute height must be explicit");
+    assertTrue(parameters.getValue(ADAPChromatogramBuilderParameters.minimumConsecutiveScans) >= 1);
+    return parameters;
+  }
+
+  private static void setOptionalJaxpAttribute(DocumentBuilderFactory factory, String name,
+      Object value) {
+    try {
+      factory.setAttribute(name, value);
+    } catch (IllegalArgumentException ignored) {
+      // Mandatory anti-XXE features above remain enforced and throw if unsupported.
+    }
+  }
+
+  private static Map<String, Object> governedSettings(ADAPChromatogramBuilderParameters parameters) {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("source_ms_level", 1);
+    value.put("centroid_noise_level", 0d);
+    value.put("minimum_consecutive_scans",
+        parameters.getValue(ADAPChromatogramBuilderParameters.minimumConsecutiveScans));
+    value.put("minimum_intensity_for_consecutive_scans",
+        parameters.getValue(ADAPChromatogramBuilderParameters.minGroupIntensity));
+    value.put("minimum_absolute_height",
+        parameters.getValue(ADAPChromatogramBuilderParameters.minHighestPoint));
+    value.put("mz_tolerance",
+        parameters.getValue(ADAPChromatogramBuilderParameters.mzTolerance).toString());
+    return value;
+  }
+
+  private static FeatureList runCandidate(MZmineProject project, RawDataFile rawDataFile,
+      ParameterSet parameters) {
+    assertEquals(0, project.getNumberOfFeatureLists());
+    Task task = ModularADAPChromatogramBuilderTask.forChromatography(project, rawDataFile,
+        parameters, null, Instant.EPOCH, ModularADAPChromatogramBuilderModule.class);
+    task.run();
+    assertEquals(TaskStatus.FINISHED, task.getStatus(),
+        () -> "Candidate ADAP task failed: " + task.getErrorMessage());
+    assertEquals(1, project.getNumberOfFeatureLists());
+    return project.getCurrentFeatureLists().get(0);
+  }
+
+  private static FeatureList runProbe(Class<?> probeClass, MZmineProject project,
+      RawDataFile rawDataFile, ParameterSet parameters) throws Exception {
+    assertEquals(0, project.getNumberOfFeatureLists());
+    Method factory = probeClass.getMethod("forChromatography", MZmineProject.class,
+        RawDataFile.class, ParameterSet.class, MemoryMapStorage.class, Instant.class, Class.class);
+    Task task;
+    try {
+      task = (Task) factory.invoke(null, project, rawDataFile, parameters, null, Instant.EPOCH,
+          ModularADAPChromatogramBuilderModule.class);
+    } catch (InvocationTargetException error) {
+      if (error.getCause() instanceof Exception exception) {
+        throw exception;
+      }
+      throw error;
+    }
+    task.run();
+    assertEquals(TaskStatus.FINISHED, task.getStatus(),
+        () -> "Frozen v4.0.8 ADAP probe failed: " + task.getErrorMessage());
+    assertEquals(1, project.getNumberOfFeatureLists());
+    return project.getCurrentFeatureLists().get(0);
+  }
+
+  private static List<Map<String, Object>> snapshot(FeatureList list, RawDataFile rawDataFile)
+      throws Exception {
+    List<Map<String, Object>> records = new ArrayList<>(list.getNumberOfRows());
+    for (int rowIndex = 0; rowIndex < list.getNumberOfRows(); rowIndex++) {
+      FeatureListRow row = list.getRow(rowIndex);
+      Feature feature = row.getFeature(rawDataFile);
+      assertNotNull(feature, "ADAP row has no feature for the governed raw file");
+      Map<String, Object> record = new LinkedHashMap<>();
+      record.put("row_index", rowIndex);
+      record.put("row_id", row.getID());
+      record.put("mz", feature.getMZ());
+      record.put("rt", feature.getRT());
+      record.put("height", feature.getHeight());
+      record.put("area", feature.getArea());
+      record.put("representative_scan_number",
+          feature.getRepresentativeScan() == null ? null
+              : feature.getRepresentativeScan().getScanNumber());
+      record.put("rt_range", range(feature.getRawDataPointsRTRange()));
+      record.put("mz_range", range(feature.getRawDataPointsMZRange()));
+      record.put("intensity_range", range(feature.getRawDataPointsIntensityRange()));
+      record.put("scan_count", feature.getScanNumbers().size());
+      record.put("series_sha256", featureSeriesSha256(feature));
+      record.put("sampled_points", sampledPoints(feature));
+      records.add(record);
+    }
+    return records;
+  }
+
+  private static List<Number> range(Range<? extends Number> range) {
+    return List.of(range.lowerEndpoint(), range.upperEndpoint());
+  }
+
+  private static String featureSeriesSha256(Feature feature) throws Exception {
+    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+    for (int index = 0; index < feature.getScanNumbers().size(); index++) {
+      Scan scan = feature.getScanAtIndex(index);
+      DataPoint point = feature.getDataPointAtIndex(index);
+      String token = point == null
+          ? scan.getScanNumber() + "|null\n"
+          : scan.getScanNumber() + "|"
+              + Long.toHexString(Double.doubleToLongBits(point.getMZ())) + "|"
+              + Long.toHexString(Double.doubleToLongBits(point.getIntensity())) + "\n";
+      digest.update(token.getBytes(StandardCharsets.UTF_8));
+    }
+    return HexFormat.of().formatHex(digest.digest());
+  }
+
+  private static List<Map<String, Object>> sampledPoints(Feature feature) {
+    int size = feature.getScanNumbers().size();
+    if (size == 0) {
+      return List.of();
+    }
+    int[] indexes = size == 1 ? new int[]{0}
+        : size == 2 ? new int[]{0, 1} : new int[]{0, size / 2, size - 1};
+    List<Map<String, Object>> points = new ArrayList<>();
+    for (int index : indexes) {
+      Map<String, Object> record = new LinkedHashMap<>();
+      Scan scan = feature.getScanAtIndex(index);
+      DataPoint point = feature.getDataPointAtIndex(index);
+      record.put("index", index);
+      record.put("scan_number", scan.getScanNumber());
+      record.put("mz", point == null ? null : point.getMZ());
+      record.put("intensity", point == null ? null : point.getIntensity());
+      points.add(record);
+    }
+    return points;
+  }
+
+  private static void verifyHash(Path path, String expected) throws Exception {
+    assertEquals(expected, sha256(path), "Governed file SHA-256 changed: " + path.getFileName());
+  }
+
+  private static String sha256(Path path) throws Exception {
+    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+    try (InputStream input = Files.newInputStream(path)) {
+      byte[] buffer = new byte[1024 * 1024];
+      int read;
+      while ((read = input.read(buffer)) >= 0) {
+        if (read > 0) {
+          digest.update(buffer, 0, read);
+        }
+      }
+    }
+    return HexFormat.of().formatHex(digest.digest());
+  }
+
+  private static String sha256(String value) throws Exception {
+    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+    return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private static String requireEnvironment(String name) {
+    String value = System.getenv(name);
+    if (value == null || value.isBlank()) {
+      throw new IllegalStateException("Missing governed environment variable " + name);
+    }
+    return value;
+  }
+}
