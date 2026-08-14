@@ -33,24 +33,53 @@ support for proprietary account, licensing, cloud, or vendor-restricted infrastr
 - public 12-stage workflow executed successfully on Linux and Windows;
 - byte-identical 22,422-byte final CSV with 176 data rows;
 - local `TaskService`, synchronous task adapters, bounded Java 20 platform-thread executors,
-  JavaFX/Desktop scheduling decoupling, and fork-local deterministic `GroupedTask`.
+  JavaFX/Desktop scheduling decoupling, and fork-local deterministic `GroupedTask`;
+- exact MZmine v4.0.8 oracle identity frozen at commit
+  `8029f930d28c0447f0acf2bcabef0a79865ad434`;
+- reviewed public v4.0.8 parser/centroid source closure compiled and executed as an isolated Java 21
+  oracle without proprietary `io.mzio` binaries;
+- direct v4.0.8 differential comparison completed for the governed indexed-centroid mzML fixture;
+- explicit MS1 and MS2 source-data paths compared independently with no manufacturer or
+  acquisition-mode inference;
+- governed indexed-centroid mzML import and centroid mass detection at noise level `0.0` classified
+  **Equivalent** for the tested scope, with strict RT differences retained and zero governed
+  differences under the frozen RT-only tolerance contract;
+- machine-readable parity inventory synchronized with that first direct result.
 
-### In progress
+### Active scientific gate
 
-- differential validation against the public mzmine v4.0.8 source line;
-- per-module 3.9 → 4.0.8 → open-offline compatibility matrix;
+The next direct v4.0.8 gate is **ADAP Chromatogram Builder** (issue #50). It starts from the already
+validated import/centroid output, freezes the v4.0.8 parameter and source mapping, emits normalized
+chromatogram membership/point-series records, and records every new discrepancy through the
+failure-first `F-xxx` process before any corrective implementation.
+
+After ADAP, the planned single-file sequence is smoothing, local-minimum resolving, and isotope
+grouping, followed by the multi-file alignment/filter/gap-filling/duplicate sequence.
+
+### Still required before a 4.0-derived release
+
+- direct v4.0.8 parity evidence for ADAP and all downstream declared scientific stages;
 - broader mzML conformance, including profile, positive, mixed-polarity, binary encoding, and richer
-  precursor metadata;
-- MS2 association, spectral-library matching, ion/adduct identity, and MSe reference workflows;
-- memory-map lifecycle, cleanup, error/exit-code, cancellation, and load benchmarks;
-- deterministic one-, two-, and N-thread comparisons;
-- portable Windows and Linux release artifacts tested from a clean environment.
+  precursor/MSn metadata;
+- a second public workflow with meaningful feature-to-MS2 association and spectral-library matching
+  or another explicitly accepted uncovered core capability;
+- memory-map lifecycle, cleanup, structured error/exit-code, cancellation, and load benchmarks;
+- deterministic one-, two-, and N-thread comparisons where concurrency affects behavior;
+- portable Windows and Linux release artifacts tested from clean environments;
+- release checksums, dependency/license inventory, SBOM, and synchronized machine/human validation
+  reports.
 
 See:
 
 - [`OPEN_OFFLINE_FORK.md`](OPEN_OFFLINE_FORK.md) — project charter and scope;
 - [`docs/public_validation/MZMINE_4_PARITY.md`](docs/public_validation/MZMINE_4_PARITY.md) — current
-  parity matrix;
+  parity matrix and release gates;
+- [`docs/public_validation/DIFFERENTIAL_HARNESS.md`](docs/public_validation/DIFFERENTIAL_HARNESS.md)
+  — current oracle/candidate comparison contract and next-stage extension rules;
+- [`docs/public_validation/V408_IMPORT_MASS_DETECTION_PARITY.md`](docs/public_validation/V408_IMPORT_MASS_DETECTION_PARITY.md)
+  — first direct v4.0.8 behavioral parity evidence, hashes, tolerances, and scope limits;
+- [`docs/public_validation/V4_0_8_ORACLE.md`](docs/public_validation/V4_0_8_ORACLE.md) — frozen oracle
+  identity, executable public-source slice, and independence boundary;
 - [`docs/public_validation/SOURCE_MS_LEVEL_SELECTION.md`](docs/public_validation/SOURCE_MS_LEVEL_SELECTION.md)
   — manual MS1/MS2 source-data selection and its scientific boundary;
 - [`docs/milestones/MILESTONE_4_0_CORE_PARITY.md`](docs/milestones/MILESTONE_4_0_CORE_PARITY.md) —
@@ -121,7 +150,8 @@ Use `--source-ms-level 2` to select MS2. This option filters the source stream f
 does not infer the instrument configuration or relabel scans.
 
 The complete CI additionally compares the frozen scientific baseline with an untouched mzmine 3.9.0
-checkout and runs governed public-corpus workflows when requested by their dedicated actions.
+checkout. The dedicated v4.0.8 oracle workflow runs explicit MS1 and MS2 differential jobs and
+retains strict plus governed comparison evidence.
 
 ## Independence policy
 
@@ -139,7 +169,8 @@ Where later public source depends on unavailable proprietary services, contribut
 2. implement a new local open interface with independently defined behavior; or
 3. classify the capability as out of scope.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the required provenance and validation process.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the required provenance, failure-first, and validation
+process.
 
 ## License and attribution
 

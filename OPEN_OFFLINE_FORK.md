@@ -78,7 +78,7 @@ The project also prohibits:
 - authentication or license bypasses;
 - fake users, fake entitlements, or “always authenticated” compatibility layers;
 - silently dropping unsupported scientific parameters;
-- weakening TLS, hash, license, or provenance checks to make public-data CI pass.
+- weakening TLS, hash, license, provenance, or numerical comparison checks to make CI pass.
 
 When later public source references unavailable proprietary infrastructure, the accepted choices are:
 
@@ -139,18 +139,71 @@ Completed:
 
 This proves robust public 3.x workflow compatibility. It is not by itself proof of 4.0 parity.
 
+### Milestone 4 foundation — first direct v4.0.8 behavioral slice
+
+Completed for the declared narrow scope:
+
+- exact public v4.0.8 oracle commit frozen at
+  `8029f930d28c0447f0acf2bcabef0a79865ad434`;
+- deterministic public parser/centroid source closure with reviewed boundaries and locked adapters;
+- isolated Java 21 executable oracle built without proprietary `io.mzio` binaries;
+- independent Java 20 open-offline normalized producer;
+- identical governed `Banane_30ngmL_001.mzML` bytes executed on both sides;
+- explicit MS1 and MS2 source-data paths validated independently;
+- all non-RT normalized import/centroid fields matched;
+- strict binary32 retention-time representation differences retained;
+- zero governed differences under the narrow RT-only tolerance contract;
+- governed indexed-centroid mzML import and centroid mass detection at noise `0.0` promoted to
+  **Equivalent** only for the tested scope.
+
+The evidence and scope limits are recorded in
+`docs/public_validation/V408_IMPORT_MASS_DETECTION_PARITY.md`. This foundation does not imply parity
+for chromatogram construction or any downstream feature-processing stage.
+
 ## Active milestone — differential 4.0.8 LC-MS core parity
 
-The next implementation sequence is:
+The infrastructure needed to prove parity is now established. The active task is to extend that same
+failure-first differential contract through the scientific pipeline.
 
-1. freeze v4.0.8 module/class/parameter references;
-2. create a machine-readable 3.9 → 4.0.8 → open-offline matrix;
-3. build a differential execution harness using identical governed mzML inputs;
-4. capture normalized intermediate outputs after each scientific stage;
-5. classify each capability as equivalent, adapted, not implemented, or out of scope;
-6. implement only the demonstrated gaps;
-7. add mzML conformance, MS2, spectral-library, memory, load, error-code, and packaging gates;
-8. publish a release validation report before changing the major version.
+Current implementation sequence:
+
+1. **ADAP Chromatogram Builder** — freeze the exact v4.0.8 module/task/parameter mapping and source
+   closure, then compare normalized chromatogram membership and point-series records (issue #50);
+2. smoothing — compare pre/post point series and boundaries;
+3. local-minimum resolver — compare feature boundaries, apex, m/z, height, area, membership, and
+   status;
+4. isotope grouping — compare memberships, representative isotope, charge, and mass error;
+5. freeze the resulting single-file feature-detection parity state;
+6. extend to blank + replicate 1 + replicate 2 for alignment, row filtering, gap filling, duplicate
+   filtering, and final normalized export;
+7. use a larger public replicate corpus before treating correlation grouping as scientifically
+   evidenced;
+8. add a second public workflow exercising feature-to-MS2 association and spectral-library matching
+   or another explicitly accepted uncovered LC-MS core capability;
+9. complete broader mzML conformance, lifecycle, cancellation, structured errors, performance,
+   1/2/N-thread determinism, packaging, checksums, licenses, SBOM, and release reports;
+10. assign a 4.0-derived version only after all declared release gates pass.
+
+ROI-MCR remains a separate fork-local experimental track and must not be used as evidence for this
+v4.0.8 parity milestone.
+
+## Failure-first parity rule
+
+Every newly discovered runtime, infrastructure, representation, or scientific discrepancy in parity
+or regression work must be recorded **before** corrective implementation. The record uses the next
+`F-xxx` identifier and retains:
+
+- original observation/evidence;
+- impact and affected gate;
+- root-cause hypothesis with confidence;
+- scientific/provenance risk;
+- proposed correction before implementation;
+- validation criteria defined before the code change;
+- final resolution without deleting the original failure record.
+
+A tolerance must not be broadened as a repair unless the representation effect is independently
+characterized, quantitatively justified, narrowly scoped, and the original strict difference remains
+retained.
 
 ## Validation corpus policy
 
@@ -198,7 +251,8 @@ Every scientific or infrastructure pull request must preserve:
 6. deterministic XML batch pipeline;
 7. equality with untouched 3.9.0 for the frozen baseline;
 8. relevant governed public-corpus checks;
-9. explicit public-source provenance or original fork-local design record.
+9. explicit public-source provenance or original fork-local design record;
+10. failure-first discrepancy records when a gate exposes a new failure.
 
 ## Porting record requirements
 

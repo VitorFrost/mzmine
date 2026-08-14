@@ -17,6 +17,10 @@ Contributions are welcome when they preserve that boundary and add evidence, not
 6. **Preserve MIT license headers and provenance.**
 7. **Keep behavior and architecture changes separable.** Do not combine a broad source-tree refactor
    with an unreviewed scientific algorithm change.
+8. **Record failures before correcting them.** Every newly discovered parity, regression, runtime,
+   infrastructure, representation, or scientific discrepancy must receive an `F-xxx` record with
+   observation, proposed correction, and predefined validation criteria before corrective code is
+   implemented.
 
 ## Handling later upstream source
 
@@ -75,6 +79,36 @@ Rules:
 - prefer a draft PR while scientific or cross-platform gates are still running;
 - do not include unrelated changes in the same PR.
 
+## Failure-first discrepancy process
+
+The failure history is part of the validation evidence. Do not fix a failed check first and reconstruct
+the explanation afterward.
+
+When a new discrepancy is observed during parity, regression, CI, lifecycle, or scientific work:
+
+1. allocate the next unique `F-xxx` identifier;
+2. record the original observation and retain the relevant report/log/hash or reproducible input;
+3. identify the affected gate and expected behavior;
+4. record impact and whether the discrepancy is infrastructure, representation, integration, or
+   potentially scientific;
+5. record a root-cause hypothesis and confidence level; if unknown, state that it is unknown rather
+   than guessing;
+6. record scientific/provenance risk, including whether the discrepancy could hide membership,
+   ordering, numerical, metadata, or algorithm changes;
+7. write the proposed correction **before** implementing it;
+8. define validation criteria **before** implementing it;
+9. implement the smallest correction consistent with that record;
+10. append the resolution and evidence while preserving the original observation.
+
+For numerical differences, broadening a tolerance is not an ordinary bug fix. Before any tolerance
+change, characterize the representation or measurement effect quantitatively and justify why the
+new bound is narrow, field-specific, and incapable of masking unrelated scientific differences. The
+strict pre-tolerance report must remain retained.
+
+A transient external failure may be resolved by an unchanged retry only after the original failure is
+recorded. Do not change dependency repositories, disable verification, or weaken scientific gates
+merely to turn CI green.
+
 ## Required PR description
 
 Every scientific or infrastructure PR should state:
@@ -89,8 +123,11 @@ Every scientific or infrastructure PR should state:
 - Linux/Windows result;
 - frozen dataset IDs/hashes when used;
 - comparison baseline and tolerances;
-- failures reproduced before repair, when applicable;
+- all new `F-xxx` failures discovered in the work, with the proposed correction and predefined
+  validation criteria recorded before the corresponding fix;
 - remaining uncertainty.
+
+If no new failure was discovered, say so rather than inventing an `F-xxx` record.
 
 ## Standard validation gates
 
@@ -105,7 +142,8 @@ Every PR targeting `open-offline-main` must preserve the relevant subset of:
 7. comparison with untouched mzmine 3.9.0;
 8. governed public-corpus workflow checks;
 9. one-, two-, and N-thread checks for concurrency-sensitive changes;
-10. memory/cleanup/error-path checks for lifecycle changes.
+10. memory/cleanup/error-path checks for lifecycle changes;
+11. strict differential-report retention and failure-first records for parity changes.
 
 Typical local commands:
 
@@ -137,6 +175,11 @@ For a capability to be marked **Equivalent**, provide where practical:
 - repeated execution;
 - platform/thread coverage;
 - direct comparison with the declared oracle, currently public mzmine v4.0.8.
+
+The evidence claim must state its tested scope narrowly. For example, the completed first direct gate
+supports governed indexed-centroid mzML import and centroid mass detection at noise `0.0`; it does
+not silently extend to profile peak picking, advanced import processors, ADAP, or downstream feature
+processing.
 
 Use the states defined in
 [`docs/public_validation/MZMINE_4_PARITY.md`](docs/public_validation/MZMINE_4_PARITY.md):

@@ -17,6 +17,17 @@ It does not include project registration, feature lists, graphical interfaces, a
 services, task scheduling, ion-mobility frame construction, or automatic instrument/manufacturer
 inference.
 
+### Subsequent execution status
+
+This source-closure gate is no longer merely preparatory. The reviewed slice was subsequently
+compiled and executed under Java 21 against the governed `Banane_30ngmL_001.mzML` bytes. Direct
+oracle/candidate comparison established governed equivalence for the declared indexed-centroid import
+and centroid-noise-`0.0` scope on both explicit MS1 and MS2 source-data paths.
+
+That behavioral result is **separate evidence** from this closure record and is documented in
+`V408_IMPORT_MASS_DETECTION_PARITY.md`. The closure remains the provenance boundary explaining
+exactly which public v4.0.8 source and reviewed adapters were allowed to participate in that result.
+
 ## Frozen source
 
 | Field | Value |
@@ -127,7 +138,7 @@ allowing unresolved or proprietary dependencies.
 
 ## Executable source-set status
 
-The focused slice has compiled successfully with Java 21 preview enabled using:
+The focused slice compiled successfully with Java 21 preview enabled using:
 
 - the exact public v4.0.8 commit;
 - 36 verified upstream classes plus 12 locked reviewed adapters;
@@ -135,9 +146,14 @@ The focused slice has compiled successfully with Java 21 preview enabled using:
 - public dependencies resolved from Maven Central;
 - no JavaFX, application project, account/cloud, or `io.mzio` dependency expansion.
 
-Compilation is a source-compatibility gate only. It is not scientific equivalence evidence.
+The executable preparation manifest is frozen independently from the closure and adapter lock. The
+first behavioral comparison then executed this slice on the same governed mzML bytes used by the
+open-offline producer.
 
-## What this proves
+Compilation remains a source-compatibility gate only. Scientific equivalence comes from the separate
+normalized execution/comparison evidence.
+
+## What this closure proves
 
 The source-closure and locked preparation gates prove that:
 
@@ -150,18 +166,31 @@ The source-closure and locked preparation gates prove that:
 - changing, deleting, or adding an adapter is rejected before generated source is copied;
 - the focused Java 21 source set compiles.
 
-It does **not** yet prove that:
+The closure **alone** does not prove scientific parity. In particular, it does not by itself prove
+that parsed values or centroid results equal the fork output. Those first behavioral claims were
+subsequently demonstrated by the governed differential evidence in
+`V408_IMPORT_MASS_DETECTION_PARITY.md`.
 
-- the parser produces the same normalized report as open-offline;
-- centroid mass detection is behaviorally equivalent on the governed mzML bytes;
-- the remaining LC-MS workflow stages have v4.0.8 parity.
+The closure also does not prove parity for:
 
-## Next gate
+- chromatogram construction;
+- smoothing or feature resolving;
+- isotope grouping;
+- alignment, filtering, gap filling, duplicate/correlation grouping;
+- feature-to-MS2 association or spectral-library matching;
+- lifecycle, packaging, or other release behavior.
 
-The next implementation gate is execution of the compiled Java 21 oracle that:
+## Completed downstream gate and current next gate
 
-1. imports the exact governed `Banane_30ngmL_001.mzML` bytes;
-2. applies the manually selected source MS level and explicit centroid noise level;
-3. emits the normalized differential stage-report contract;
-4. compares every normalized import and centroid value with the existing open-offline report;
-5. retains all differences, tolerances, provenance, and failure history.
+The execution gate that originally followed this source-closure work is complete:
+
+1. the exact governed `Banane_30ngmL_001.mzML` bytes were imported;
+2. explicit MS1 and MS2 source paths were executed separately;
+3. centroid noise level `0.0` was applied;
+4. normalized oracle and candidate reports were emitted independently;
+5. strict differences were retained;
+6. a narrow RT-only representation contract produced zero governed differences for both paths.
+
+The current next scientific gate is **ADAP Chromatogram Builder** (issue #50). That stage requires a
+new, stage-specific v4.0.8 source/parameter closure and must not assume that this parser/centroid
+closure proves anything about downstream feature construction.
