@@ -147,11 +147,12 @@ class MZmineMinimumSearchResolverSideAcceptanceTest {
     SmoothingParameters smoothing = loadPublishedSmoothingParameters(settings);
     ModularFeatureList smoothed = (ModularFeatureList) runSmoothing(project, adapList,
         smoothing.cloneParameterSet(true));
-    List<Map<String, Object>> smoothedRecords = snapshot(smoothed, raw, null);
+    List<Map<String, Object>> smoothedRecords = snapshotSmoothingInput(smoothed, raw);
     assertEquals(517, smoothedRecords.size(), "Governed post-smoothing feature count changed");
     String smoothedSha = sha256(JSON.writeValueAsString(smoothedRecords));
     assertEquals(GOVERNED_SMOOTHING_SHA, smoothedSha,
-        "Resolver gate did not start from the accepted post-smoothing state");
+        () -> "Resolver gate did not start from the accepted post-smoothing state; observed="
+            + smoothedSha);
 
     ParameterSet resolverParameters = loadPublishedResolverParameters(settings);
     assertInstanceOf(MinimumSearchFeatureResolverParameters.class, resolverParameters);
@@ -343,6 +344,35 @@ class MZmineMinimumSearchResolverSideAcceptanceTest {
     throw new AssertionError("Output feature list was not uniquely identified");
   }
 
+  /** Exact canonical schema used by the accepted v4.0.8 smoothing differential. */
+  private static List<Map<String, Object>> snapshotSmoothingInput(FeatureList list, RawDataFile raw)
+      throws Exception {
+    List<Map<String, Object>> records = new ArrayList<>(list.getNumberOfRows());
+    for (int rowIndex = 0; rowIndex < list.getNumberOfRows(); rowIndex++) {
+      FeatureListRow row = list.getRow(rowIndex);
+      Feature feature = row.getFeature(raw);
+      assertNotNull(feature);
+      Map<String, Object> record = new LinkedHashMap<>();
+      record.put("row_index", rowIndex);
+      record.put("row_id", row.getID());
+      record.put("mz", feature.getMZ());
+      record.put("rt", feature.getRT());
+      record.put("height", feature.getHeight());
+      record.put("area", feature.getArea());
+      record.put("representative_scan_number", feature.getRepresentativeScan() == null ? null
+          : feature.getRepresentativeScan().getScanNumber());
+      record.put("rt_range", range(feature.getRawDataPointsRTRange()));
+      record.put("mz_range", range(feature.getRawDataPointsMZRange()));
+      record.put("intensity_range", range(feature.getRawDataPointsIntensityRange()));
+      record.put("scan_count", feature.getScanNumbers().size());
+      record.put("series_sha256", featureSeriesSha256(feature));
+      record.put("sampled_points", sampledPoints(feature));
+      records.add(record);
+    }
+    return records;
+  }
+
+  /** Rich resolver-output schema. Keep downstream split/source evidence out of the smoothing hash. */
   private static List<Map<String, Object>> snapshot(FeatureList list, RawDataFile raw,
       FeatureList sourceList) throws Exception {
     List<Map<String, Object>> records = new ArrayList<>(list.getNumberOfRows());
