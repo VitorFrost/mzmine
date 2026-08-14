@@ -73,7 +73,9 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
+
           p = Path("oracle/v408-executable/evidence/v408-adap-source-closure.json")
           report = json.loads(p.read_text(encoding="utf-8"))
           summary = {
@@ -83,6 +85,26 @@ jobs:
               "reviewed_boundaries_reached": report["reviewed_boundaries_reached"],
           }
           print(json.dumps(summary, indent=2, sort_keys=True))
+
+          def command_escape(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          for violation in report["violations"]:
+              print(f"::error title=F-023 ADAP source closure::{command_escape(violation)}")
+
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+              with Path(step_summary).open("a", encoding="utf-8") as handle:
+                  handle.write("## F-023 — ADAP source closure\n\n")
+                  handle.write(f"Status: `{report['status']}`\n\n")
+                  handle.write("```json\n")
+                  handle.write(json.dumps(report["summary"], indent=2, sort_keys=True))
+                  handle.write("\n```\n\n")
+                  if report["violations"]:
+                      handle.write("Violations:\n")
+                      for violation in report["violations"]:
+                          handle.write(f"- `{violation}`\n")
+
           if report["status"] != "pass" or report["violations"]:
               raise SystemExit("ADAP source closure has unresolved or prohibited dependencies")
           PY
