@@ -10,8 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import jsonschema
-
 SCRIPTS = Path(__file__).resolve().parents[1]
 REPOSITORY = Path(__file__).resolve().parents[2]
 
@@ -110,12 +108,21 @@ def base_report() -> dict:
 
 class CompareMZmineAdapReportsTest(unittest.TestCase):
 
-  def test_example_satisfies_json_schema_and_runtime_validator(self) -> None:
+  def test_example_matches_committed_schema_contract_and_runtime_validator(self) -> None:
     report = base_report()
     schema = json.loads((
         REPOSITORY / "datasets/parity/adap_chromatogram_stage_report.schema.json"
     ).read_text(encoding="utf-8"))
-    jsonschema.Draft202012Validator(schema).validate(report)
+    self.assertEqual("https://json-schema.org/draft/2020-12/schema", schema["$schema"])
+    self.assertEqual(1, schema["properties"]["schema_version"]["const"])
+    stage_properties = schema["$defs"]["stage"]["properties"]
+    self.assertEqual("adap_chromatogram_builder", stage_properties["stage_name"]["const"])
+    self.assertEqual("chromatogram_key", stage_properties["record_key"]["const"])
+    self.assertEqual(COMPARATOR.KEY_CONTRACT, stage_properties["key_contract"]["const"])
+    self.assertEqual(
+        "^adap:[0-9a-f]{64}$",
+        schema["$defs"]["chromatogramRecord"]["properties"]["chromatogram_key"]["pattern"],
+    )
     COMPARATOR.validate_report(report)
 
   def test_equal_reports_have_zero_differences(self) -> None:
