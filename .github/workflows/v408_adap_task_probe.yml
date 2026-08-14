@@ -37,7 +37,7 @@ jobs:
       SETTINGS_FILE: build/public_validation_data/zenodo/14000687/MZmine processing settings.xml
       SETTINGS_SHA256: 87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c
       DIFFERENTIAL_REPORT: build/adap_parity/v408-open-offline-adap-differential.json
-      JAVA_TOOL_OPTIONS: -Djava.util.concurrent.ForkJoinPool.common.parallelism=1
+      JAVA_TOOL_OPTIONS: -Xmx3g -Djava.util.concurrent.ForkJoinPool.common.parallelism=1
     steps:
       - name: Check out candidate
         uses: actions/checkout@v4
