@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v1",
+  "audit_id": "mzmine-v4.0.8-adap-chromatogram-builder-source-closure-v2",
   "oracle": {
     "repository": "mzmine/mzmine",
     "tag": "v4.0.8",
@@ -29,6 +29,10 @@
     "io.github.mzmine.main.MZmineCore": {
       "classification": "application-bootstrap-boundary",
       "reason": "The chromatogram differential must not initialize GUI, account, cloud, or application lifecycle services. Scientific settings and output normalization are supplied explicitly by the harness."
+    },
+    "io.github.mzmine.gui.MZmineGUI": {
+      "classification": "headless-gui-activation-boundary",
+      "reason": "ModularFeatureList requires ProjectService and the real default ProjectManagerImpl, so project behavior is retained. ProjectManagerImpl references MZmineGUI only from setCurrentProject after the MZmineCore headless guard. The governed chromatogram harness uses the already-created default project, never calls setCurrentProject, never starts JavaFX UI, and does not execute account or cloud behavior. The executable boundary, if this closure succeeds, may preserve only the compile-time GUI activation signature and must fail the test if invoked."
     },
     "io.github.mzmine.util.MemoryMapStorage": {
       "classification": "storage-boundary-pending-runtime-design",
