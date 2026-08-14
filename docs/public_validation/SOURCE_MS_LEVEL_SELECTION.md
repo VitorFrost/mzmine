@@ -16,8 +16,9 @@ collision-energy metadata.
 
 ## What the selection does
 
-The selected value configures the existing MZmine `ScanSelection` used by mass detection. Only scans
-with that original MS level receive the selected mass-detection processing in that run.
+The selected value configures the existing MZmine `ScanSelection` used by mass detection and by
+scientific stages that explicitly consume the selected source stream. Only scans with that original
+MS level receive the selected processing in that run.
 
 The choice is recorded in:
 
@@ -26,7 +27,7 @@ The choice is recorded in:
 - the canonical settings SHA-256;
 - the generated differential report.
 
-The current mapping ids are:
+The current import/centroid mapping ids are:
 
 - `mzml-import-centroid-source-ms1-v1`;
 - `mzml-import-centroid-source-ms2-v1`.
@@ -41,13 +42,13 @@ The software does **not**:
 - change the original `msLevel` stored in the mzML or imported scans;
 - claim that an MS2-labeled scan is or is not a fragmented spectrum;
 - infer instrument architecture or acquisition intent;
-- combine MS1 and MS2 as one source stream in a single run;
+- combine MS1 and MS2 as one source stream in a single producer execution;
 - interpret the selected level as proof of analytical identity.
 
 The analyst remains responsible for choosing the level that corresponds to the intended source data
 for the acquisition under review.
 
-## User interfaces
+## User interfaces and CI behavior
 
 ### Command line
 
@@ -63,11 +64,32 @@ python scripts/generate_mzmine_stage_report.py \
 Use `--source-ms-level 2` to select MS2 instead. The older `--survey-ms-level` spelling remains an
 accepted compatibility alias, but new commands and documentation use `--source-ms-level`.
 
-### GitHub Actions
+### Public parity stage-report workflow
 
 When `Public parity stage report` is started manually, the user chooses `source_ms_level` from a
-choice field containing `1` and `2`. Pull-request and integration runs remain frozen to MS1 unless a
-separate governed workflow is explicitly configured.
+choice field containing `1` and `2`. One producer execution processes one explicitly selected source
+level.
+
+### Direct v4.0.8 oracle differential workflow
+
+The completed v4.0.8 import/centroid gate validates **both** user-selectable paths. Push and
+pull-request CI use two explicit jobs/matrix entries, one for MS1 and one for MS2. Each path executes
+the oracle and candidate independently and retains its own settings identity, strict comparison, and
+governed comparison.
+
+This distinction is important: the software still never auto-selects or combines the source levels.
+CI simply runs both explicit choices as separate governed validation cases.
+
+The first completed result is documented in
+`V408_IMPORT_MASS_DETECTION_PARITY.md`.
+
+## Current downstream use
+
+The first ADAP Chromatogram Builder parity gate is intentionally starting with explicit **MS1** source
+data so that chromatogram-construction differences are isolated from MS2 association semantics.
+This does not remove MS2 support or reinterpret MS2. The validated explicit MS2 import/centroid path
+remains retained for later feature-to-MS2 association and other workflows where it is scientifically
+appropriate.
 
 ## Scientific note shown to the user
 

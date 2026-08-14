@@ -18,8 +18,20 @@ The associated article describes MZmine 3.4.16, while the actual settings XML id
 3.4.27. The exact XML metadata and frozen hash are authoritative for this compatibility benchmark.
 
 The workflow is a real public scientific reference. It establishes configuration and execution
-compatibility with a complex 3.x workflow. It is not direct proof of mzmine 4.0.8 parity; that requires
+compatibility with a complex 3.x workflow. It is not direct proof of MZmine 4.0.8 parity; that requires
 separate differential execution against the frozen public 4.0.8 oracle.
+
+## Relationship to the direct v4.0.8 work
+
+The first direct v4.0.8 differential slice has since been completed on
+`Banane_30ngmL_001.mzML` for governed indexed-centroid import plus the centroid detector at explicit
+noise level `0.0`, with separate explicit MS1 and MS2 source paths. Those narrow capabilities are now
+`Equivalent` for that tested scope.
+
+That result does **not** automatically promote the complete published 3.4.27 workflow or its exact
+mass-detection settings. ADAP and all later published stages still require stage-specific v4.0.8
+parameter mappings and differential evidence. The direct import/centroid evidence is documented in
+`V408_IMPORT_MASS_DETECTION_PARITY.md`.
 
 ## Governed inputs
 
@@ -131,22 +143,24 @@ rather than hidden.
 
 The correlation-grouping stage completed but found no useful row-to-row correlations in the minimal
 blank-plus-single-replicate execution. Completion is therefore operational evidence only; scientific
-correlation-group parity remains unvalidated and requires a larger replicate corpus.
+correlation-group parity remains unvalidated and requires a larger replicate corpus. Because the
+implementation exists and executes, the current parity inventory classifies correlation grouping as
+`Adapted`, not `Not implemented`.
 
 ## Current module classification
 
-| # | Published module | 3.x compatibility evidence | 4.0.8 status |
+| # | Published module | 3.x compatibility evidence | Current 4.0.8 evidence state |
 |---:|---|---|---|
-| 1 | Mass detection | Parameters and real workflow validated | Differential mass-list comparison pending |
-| 2 | ADAP chromatogram builder | Parameters and real workflow validated | Differential feature-series comparison pending |
-| 3 | Smoothing | Parameters and frozen output count validated | Differential point-series comparison pending |
-| 4 | Local-minimum resolver | Synthetic and real workflow validated | Differential split/value comparison pending |
-| 5 | Isotopic peaks finder | Frozen pattern counts validated | Membership/charge comparison pending |
-| 6 | Feature-list rows filter | Workflow completed without silent parameter loss | Per-row decision comparison pending |
-| 7 | Join aligner | Synthetic and public workflow validated | Replicate membership comparison pending |
-| 8 | Multithreaded peak finder | Frozen gap counts validated | 1/2/N-thread and v4.0.8 comparison pending |
-| 9 | Duplicate peak filter | Frozen removal count validated | Duplicate groups/representatives pending |
-| 10 | Correlation grouping | Operational completion only | Multi-replicate scientific benchmark required |
+| 1 | Mass detection | Parameters and real 3.x workflow validated | Primitive centroid noise-`0.0` behavior is directly Equivalent on the first governed fixture; the exact published-workflow parameter mapping still requires its own differential execution |
+| 2 | ADAP chromatogram builder | Parameters and real workflow validated | **Adapted; active differential gate #50** |
+| 3 | Smoothing | Parameters and frozen output count validated | Adapted; differential point-series comparison pending |
+| 4 | Local-minimum resolver | Synthetic and real workflow validated | Adapted; differential split/value comparison pending |
+| 5 | Isotopic peaks finder | Frozen pattern counts validated | Adapted; membership/charge comparison pending |
+| 6 | Feature-list rows filter | Workflow completed without silent parameter loss | Adapted; per-row decision comparison pending |
+| 7 | Join aligner | Synthetic and public workflow validated | Adapted; replicate membership comparison pending |
+| 8 | Multithreaded peak finder | Frozen gap counts validated | Adapted; 1/2/N-thread and v4.0.8 comparison pending |
+| 9 | Duplicate peak filter | Frozen removal count validated | Adapted; duplicate groups/representatives pending |
+| 10 | Correlation grouping | Operational completion only | Adapted; larger multi-replicate scientific benchmark required |
 
 ## Blank-handling boundary
 
@@ -160,19 +174,24 @@ A separate analytical blank-classification layer may later add:
 - carryover or cleaning-file evidence;
 - reporting categories and confidence levels.
 
-That layer must remain distinct from claims of published workflow compatibility or mzmine 4.0.8
+That layer must remain distinct from claims of published workflow compatibility or MZmine 4.0.8
 parity.
 
 ## Next evidence
 
-This benchmark is now complete for its stated 3.x compatibility purpose. Its next use is as one input
-to the differential 4.0.8 harness:
+This benchmark is complete for its stated 3.x compatibility purpose. It now supplies governed input
+and settings context for the stage-by-stage 4.0.8 differential program.
 
-1. freeze the corresponding v4.0.8 modules and parameter mappings;
-2. execute the same governed mzML bytes where the 4.0.8 reference can accept them;
-3. capture normalized intermediate records after each stage;
-4. compare counts, memberships, m/z, RT, height, area, point counts, statuses, and filter decisions;
-5. classify each module as equivalent, adapted, not implemented, or out of scope.
+Immediate sequence:
 
-No proprietary `io.mzio` binary, authentication service, licensing behavior, or decompiled source is
-part of this benchmark.
+1. complete ADAP source/parameter mapping and chromatogram differential on the already validated
+   single-file MS1 path;
+2. continue through smoothing, local-minimum resolving, and isotope grouping;
+3. freeze the resulting single-file feature-detection parity state;
+4. use blank + replicate 1 + replicate 2 for alignment, row-filter decisions, gap filling, duplicate
+   grouping, and final normalized export;
+5. use a larger replicate corpus before making a scientific correlation-group parity claim.
+
+Every new discrepancy must be retained and registered through the failure-first `F-xxx` process
+before corrective implementation. No proprietary `io.mzio` binary, authentication service,
+licensing behavior, or decompiled source is part of this benchmark.

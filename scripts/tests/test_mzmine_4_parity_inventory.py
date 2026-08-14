@@ -39,6 +39,10 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
     cls.inventory = json.loads(cls.inventory_path.read_text(encoding="utf-8"))
     cls.manifest = json.loads(cls.manifest_path.read_text(encoding="utf-8"))
 
+  @staticmethod
+  def module_by_id(inventory: dict, module_id: str) -> dict:
+    return next(module for module in inventory["modules"] if module["id"] == module_id)
+
   def test_committed_inventory_is_valid_and_pins_v408(self) -> None:
     report = VALIDATOR.validate(copy.deepcopy(self.inventory), self.manifest)
     self.assertTrue(report["valid"])
@@ -46,16 +50,28 @@ class MZmine4ParityInventoryTest(unittest.TestCase):
         "8029f930d28c0447f0acf2bcabef0a79865ad434",
         report["oracle_commit"],
     )
-    self.assertEqual("blocked-by-independence-policy", report["oracle_execution_status"])
+    self.assertEqual("complete", report["oracle_execution_status"])
     self.assertEqual(12, report["module_count"])
     self.assertEqual(12, report["source_presence_verified_count"])
-    self.assertEqual(0, report["direct_differential_complete_count"])
+    self.assertEqual(2, report["direct_differential_complete_count"])
     self.assertEqual(2, report["dataset_group_count"])
     self.assertEqual(3, report["tolerance_profile_count"])
 
+    equivalent_modules = {
+        module["id"] for module in self.inventory["modules"]
+        if module["classification"] == "Equivalent"
+    }
+    self.assertEqual({"mzml-import", "mass-detection"}, equivalent_modules)
+    for module_id in equivalent_modules:
+      module = self.module_by_id(self.inventory, module_id)
+      self.assertTrue(module["evidence"]["direct_differential_complete"])
+      self.assertEqual("complete", module["gate"]["status"])
+
   def test_equivalent_requires_direct_differential_evidence(self) -> None:
     inventory = copy.deepcopy(self.inventory)
-    inventory["modules"][0]["classification"] = "Equivalent"
+    adap = self.module_by_id(inventory, "adap-chromatogram-builder")
+    self.assertFalse(adap["evidence"]["direct_differential_complete"])
+    adap["classification"] = "Equivalent"
     with self.assertRaisesRegex(
         VALIDATOR.ValidationError, "cannot be Equivalent"
     ):
