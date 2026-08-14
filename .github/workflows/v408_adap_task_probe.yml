@@ -8,22 +8,36 @@ on:
     paths:
       - ".github/workflows/v408_adap_task_probe.yml"
       - "scripts/prepare_v408_adap_task_probe.py"
+      - "scripts/tests/test_prepare_v408_adap_task_probe.py"
+      - "scripts/fetch_public_test_data.py"
+      - "src/test/java/MZmineAdapChromatogramDifferentialAcceptanceTest.java"
       - "src/main/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/**"
       - "datasets/parity/v408_adap_chromatogram_builder_inventory.json"
+      - "datasets/public_validation_manifest.json"
+      - "datasets/public_workflow_manifest.json"
 
 permissions:
   contents: read
 
 jobs:
-  compile-probe:
+  direct-differential:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       ORACLE_COMMIT: 8029f930d28c0447f0acf2bcabef0a79865ad434
       ORACLE_PATH: build/oracle/mzmine-v4.0.8
       PROBE_SOURCE: src/test/java/io/github/mzmine/modules/dataprocessing/featdet_adapchromatogrambuilder/V408ModularADAPChromatogramBuilderTaskProbe.java
       PROBE_EVIDENCE: build/adap_parity/v408-adap-task-probe-preparation.json
       PREP_LOG: build/adap_parity/v408-adap-task-probe-preparation.log
+      DATA_ROOT: build/public_validation_data
+      DATASET_ID: zenodo-14001110-banane-30ngml-001
+      INPUT_FILE: build/public_validation_data/zenodo/14001110/Banane_30ngmL_001.mzML
+      INPUT_SHA256: 2eb189e193925983ddf8348a13a4c96fa7382e4e790665a204251eb036aea77d
+      SETTINGS_DATASET_ID: zenodo-14000687-mzmine-processing-settings
+      SETTINGS_FILE: build/public_validation_data/zenodo/14000687/MZmine processing settings.xml
+      SETTINGS_SHA256: 87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c
+      DIFFERENTIAL_REPORT: build/adap_parity/v408-open-offline-adap-differential.json
+      JAVA_TOOL_OPTIONS: -Djava.util.concurrent.ForkJoinPool.common.parallelism=1
     steps:
       - name: Check out candidate
         uses: actions/checkout@v4
@@ -35,6 +49,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Run probe preparation regression tests
+        shell: bash
+        run: python -m unittest scripts/tests/test_prepare_v408_adap_task_probe.py -v
 
       - name: Set up Java 20
         uses: actions/setup-java@v5
@@ -80,7 +98,96 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew compileTestJava --no-daemon --stacktrace 2>&1 | tee build/adap_parity/v408-adap-task-probe-compile.log
+          ./gradlew compileTestJava --no-daemon --stacktrace \
+            2>&1 | tee build/adap_parity/v408-adap-task-probe-compile.log
+
+      - name: Download and verify governed public mzML
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_validation_manifest.json
+          --dataset "${DATASET_ID}"
+          --output-dir "${DATA_ROOT}"
+          --timeout 180
+          --retries 3
+
+      - name: Download and verify published MZmine settings
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_workflow_manifest.json
+          --dataset "${SETTINGS_DATASET_ID}"
+          --output-dir "${DATA_ROOT}"
+          --timeout 120
+          --retries 3
+
+      - name: Verify governed bytes again
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_validation_manifest.json \
+            --dataset "${DATASET_ID}" \
+            --output-dir "${DATA_ROOT}" \
+            --verify-existing
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_workflow_manifest.json \
+            --dataset "${SETTINGS_DATASET_ID}" \
+            --output-dir "${DATA_ROOT}" \
+            --verify-existing
+
+      - name: Execute direct ADAP differential on public LC-MS
+        shell: bash
+        env:
+          MZMINE_ADAP_PARITY_INPUT: ${{ github.workspace }}/${{ env.INPUT_FILE }}
+          MZMINE_ADAP_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
+          MZMINE_ADAP_PARITY_OUTPUT: ${{ github.workspace }}/${{ env.DIFFERENTIAL_REPORT }}
+          MZMINE_ADAP_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
+          MZMINE_ADAP_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
+          MZMINE_ADAP_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -o pipefail
+          ./gradlew test \
+            --tests MZmineAdapChromatogramDifferentialAcceptanceTest \
+            --rerun-tasks --no-daemon --stacktrace \
+            2>&1 | tee build/adap_parity/v408-adap-direct-differential.log
+
+      - name: Summarize differential evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "${DIFFERENTIAL_REPORT}" ]]; then
+            python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          path = Path(os.environ["DIFFERENTIAL_REPORT"])
+          report = json.loads(path.read_text(encoding="utf-8"))
+          summary = {
+              "report_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+              "candidate_commit": report.get("candidate_commit"),
+              "oracle_commit": report.get("oracle_commit"),
+              "input_sha256": report.get("input_sha256"),
+              "published_settings_sha256": report.get("published_settings_sha256"),
+              "ms1_scan_count": report.get("ms1_scan_count"),
+              "settings": report.get("settings"),
+              "candidate_feature_count": report.get("candidate_feature_count"),
+              "oracle_feature_count": report.get("oracle_feature_count"),
+              "candidate_records_sha256": report.get("candidate_records_sha256"),
+              "oracle_records_sha256": report.get("oracle_records_sha256"),
+              "records_equal": report.get("records_equal"),
+          }
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          step = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step:
+              with Path(step).open("a", encoding="utf-8") as handle:
+                  handle.write("## v4.0.8 ADAP direct differential\n\n```json\n")
+                  handle.write(json.dumps(summary, indent=2, sort_keys=True))
+                  handle.write("\n```\n")
+          PY
+          else
+            echo "No differential report was produced; inspect F-024/F-025 logs." >&2
+          fi
 
       - name: Inspect and remove generated probe
         if: always()
@@ -98,12 +205,21 @@ jobs:
             rm -f "${PROBE_SOURCE}"
           fi
 
-      - name: Upload probe evidence
+      - name: Remove downloaded public data
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "${DATA_ROOT}"
+          test ! -e "${DATA_ROOT}"
+
+      - name: Upload ADAP differential evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v408-adap-task-probe-${{ github.run_id }}
+          name: v408-adap-direct-differential-${{ github.run_id }}
           path: |
             build/adap_parity/
+            build/reports/tests/test/
+            build/test-results/test/
           if-no-files-found: warn
           retention-days: 30
