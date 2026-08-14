@@ -52,6 +52,9 @@ jobs:
       SETTINGS_SHA256: 87845675b0cda32e7ce4c70a2a03f1a8ad465d18d018ede1db57fe61adee074c
       CANDIDATE_SIDE_REPORT: build/smoothing_parity/open-offline-smoothing-side.json
       ORACLE_SIDE_REPORT: build/smoothing_parity/v408-smoothing-side.json
+      CANDIDATE_POINTS_REPORT: build/smoothing_parity/open-offline-smoothing-points.tsv
+      ORACLE_POINTS_REPORT: build/smoothing_parity/v408-smoothing-points.tsv
+      POINT_DIFFERENCES: build/smoothing_parity/v408-open-offline-smoothing-point-differences.jsonl
       DIFFERENTIAL_REPORT: build/smoothing_parity/v408-open-offline-smoothing-differential.json
       JAVA_TOOL_OPTIONS: -Xmx5g -Djava.util.concurrent.ForkJoinPool.common.parallelism=1
     steps:
@@ -151,17 +154,22 @@ jobs:
           MZMINE_SMOOTHING_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
           MZMINE_SMOOTHING_PARITY_SIDE: candidate
           MZMINE_SMOOTHING_PARITY_SIDE_OUTPUT: ${{ github.workspace }}/${{ env.CANDIDATE_SIDE_REPORT }}
+          MZMINE_SMOOTHING_PARITY_POINTS_OUTPUT: ${{ github.workspace }}/${{ env.CANDIDATE_POINTS_REPORT }}
           MZMINE_SMOOTHING_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
           MZMINE_SMOOTHING_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
           MZMINE_SMOOTHING_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -o pipefail
           rm -rf build/test-results/test build/reports/tests/test
+          rm -f "${CANDIDATE_SIDE_REPORT}" "${CANDIDATE_POINTS_REPORT}" \
+            build/smoothing_parity/open-offline-smoothing-side-junit.xml
+          set +e
           ./gradlew test \
             --tests MZmineSmoothingSideAcceptanceTest \
             --no-daemon --stacktrace \
             2>&1 | tee build/smoothing_parity/open-offline-smoothing-side.log
           code=${PIPESTATUS[0]}
+          set -e
           if [[ -f build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml ]]; then
             cp build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml \
               build/smoothing_parity/open-offline-smoothing-side-junit.xml
@@ -177,24 +185,29 @@ jobs:
           MZMINE_SMOOTHING_PARITY_SETTINGS: ${{ github.workspace }}/${{ env.SETTINGS_FILE }}
           MZMINE_SMOOTHING_PARITY_SIDE: oracle
           MZMINE_SMOOTHING_PARITY_SIDE_OUTPUT: ${{ github.workspace }}/${{ env.ORACLE_SIDE_REPORT }}
+          MZMINE_SMOOTHING_PARITY_POINTS_OUTPUT: ${{ github.workspace }}/${{ env.ORACLE_POINTS_REPORT }}
           MZMINE_SMOOTHING_PARITY_INPUT_SHA256: ${{ env.INPUT_SHA256 }}
           MZMINE_SMOOTHING_PARITY_SETTINGS_SHA256: ${{ env.SETTINGS_SHA256 }}
           MZMINE_SMOOTHING_PARITY_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -o pipefail
           rm -rf build/test-results/test build/reports/tests/test
+          rm -f "${ORACLE_SIDE_REPORT}" "${ORACLE_POINTS_REPORT}" \
+            build/smoothing_parity/v408-smoothing-side-junit.xml
+          set +e
           ./gradlew test \
             --tests MZmineSmoothingSideAcceptanceTest \
             --no-daemon --stacktrace \
             2>&1 | tee build/smoothing_parity/v408-smoothing-side.log
           code=${PIPESTATUS[0]}
+          set -e
           if [[ -f build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml ]]; then
             cp build/test-results/test/TEST-MZmineSmoothingSideAcceptanceTest.xml \
               build/smoothing_parity/v408-smoothing-side-junit.xml
           fi
           exit "${code}"
 
-      - name: Compare normalized smoothing side reports
+      - name: Compare normalized smoothing side reports and complete point streams
         if: always()
         shell: bash
         env:
@@ -206,60 +219,149 @@ jobs:
           import json
           import os
           import xml.etree.ElementTree as ET
+          from itertools import zip_longest
           from pathlib import Path
 
           candidate_path = Path(os.environ["CANDIDATE_SIDE_REPORT"])
           oracle_path = Path(os.environ["ORACLE_SIDE_REPORT"])
+          candidate_points = Path(os.environ["CANDIDATE_POINTS_REPORT"])
+          oracle_points = Path(os.environ["ORACLE_POINTS_REPORT"])
+          point_differences = Path(os.environ["POINT_DIFFERENCES"])
           output_path = Path(os.environ["DIFFERENTIAL_REPORT"])
+          expected_header = (
+              "row_index\tpoint_index\tscan_number\trt_float32_bits\t"
+              "mz_float64_bits\tintensity_float64_bits\n"
+          )
+
+          def sha256_file(path: Path) -> str:
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+              for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+            return digest.hexdigest()
 
           def junit_problem(path: Path):
             if not path.is_file():
               return None
             root = ET.parse(path).getroot()
             for case in root.findall('.//testcase'):
-              problem = case.find('failure') or case.find('error')
+              problem = case.find('failure')
+              if problem is None:
+                problem = case.find('error')
               if problem is not None:
                 return problem.get('message') or (problem.text or '').strip()
             return None
 
-          missing = [name for name, path in (("candidate", candidate_path), ("oracle", oracle_path))
-                     if not path.is_file()]
+          missing = [
+              name for name, path in (
+                  ("candidate_report", candidate_path),
+                  ("oracle_report", oracle_path),
+                  ("candidate_points", candidate_points),
+                  ("oracle_points", oracle_points),
+              )
+              if not path.is_file()
+          ]
           if missing:
             details = {
-                "missing_side_reports": missing,
+                "missing_artifacts": missing,
                 "candidate_step_outcome": os.environ.get("CANDIDATE_STEP_OUTCOME"),
                 "oracle_step_outcome": os.environ.get("ORACLE_STEP_OUTCOME"),
-                "candidate_junit_problem": junit_problem(Path("build/smoothing_parity/open-offline-smoothing-side-junit.xml")),
-                "oracle_junit_problem": junit_problem(Path("build/smoothing_parity/v408-smoothing-side-junit.xml")),
+                "candidate_junit_problem": junit_problem(
+                    Path("build/smoothing_parity/open-offline-smoothing-side-junit.xml")),
+                "oracle_junit_problem": junit_problem(
+                    Path("build/smoothing_parity/v408-smoothing-side-junit.xml")),
             }
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps({"status": "side-execution-failed", **details},
+                           indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
             raise SystemExit(json.dumps(details, sort_keys=True))
 
           candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
           oracle = json.loads(oracle_path.read_text(encoding="utf-8"))
           for field in (
               "input_sha256", "published_settings_sha256", "ms1_scan_count",
-              "adap_feature_count", "pre_smoothing_records_sha256", "settings"):
+              "adap_feature_count", "pre_smoothing_records_sha256", "settings",
+              "points_sidecar_format"):
             if candidate.get(field) != oracle.get(field):
               raise SystemExit(f"smoothing parity precondition differs for {field}")
           if candidate.get("implementation") != "candidate" or oracle.get("implementation") != "oracle":
             raise SystemExit("smoothing side implementation labels are invalid")
 
+          candidate_points_sha = sha256_file(candidate_points)
+          oracle_points_sha = sha256_file(oracle_points)
+          if candidate_points_sha != candidate.get("points_sidecar_sha256"):
+            raise SystemExit("candidate point sidecar SHA-256 does not match its side report")
+          if oracle_points_sha != oracle.get("points_sidecar_sha256"):
+            raise SystemExit("oracle point sidecar SHA-256 does not match its side report")
+          if candidate_points.stat().st_size != candidate.get("points_sidecar_bytes"):
+            raise SystemExit("candidate point sidecar byte count does not match its side report")
+          if oracle_points.stat().st_size != oracle.get("points_sidecar_bytes"):
+            raise SystemExit("oracle point sidecar byte count does not match its side report")
+
           c_records = candidate["records"]
           o_records = oracle["records"]
           records_equal = c_records == o_records
-          first_mismatch = None
+          first_record_mismatch = None
           for index in range(min(len(c_records), len(o_records))):
             if c_records[index] != o_records[index]:
-              first_mismatch = {"index": index, "candidate": c_records[index], "oracle": o_records[index]}
+              first_record_mismatch = {
+                  "index": index,
+                  "candidate": c_records[index],
+                  "oracle": o_records[index],
+              }
               break
-          if first_mismatch is None and len(c_records) != len(o_records):
-            first_mismatch = {"index": min(len(c_records), len(o_records)),
-                              "candidate": None if len(c_records) <= len(o_records) else c_records[len(o_records)],
-                              "oracle": None if len(o_records) <= len(c_records) else o_records[len(c_records)]}
+          if first_record_mismatch is None and len(c_records) != len(o_records):
+            first_record_mismatch = {
+                "index": min(len(c_records), len(o_records)),
+                "candidate": None if len(c_records) <= len(o_records)
+                    else c_records[len(o_records)],
+                "oracle": None if len(o_records) <= len(c_records)
+                    else o_records[len(c_records)],
+            }
+
+          point_differences.parent.mkdir(parents=True, exist_ok=True)
+          point_difference_count = 0
+          first_point_mismatch = None
+          candidate_point_count = 0
+          oracle_point_count = 0
+          with candidate_points.open("r", encoding="utf-8", newline="") as cf, \
+              oracle_points.open("r", encoding="utf-8", newline="") as of, \
+              point_differences.open("w", encoding="utf-8", newline="\n") as diff:
+            candidate_header = cf.readline()
+            oracle_header = of.readline()
+            if candidate_header != expected_header or oracle_header != expected_header:
+              raise SystemExit("smoothing point sidecar header/format is invalid")
+            for point_line, (candidate_line, oracle_line) in enumerate(
+                zip_longest(cf, of, fillvalue=None), start=1):
+              if candidate_line is not None:
+                candidate_point_count += 1
+              if oracle_line is not None:
+                oracle_point_count += 1
+              if candidate_line != oracle_line:
+                mismatch = {
+                    "point_line": point_line,
+                    "candidate": None if candidate_line is None
+                        else candidate_line.rstrip("\n"),
+                    "oracle": None if oracle_line is None
+                        else oracle_line.rstrip("\n"),
+                }
+                diff.write(json.dumps(mismatch, sort_keys=True) + "\n")
+                point_difference_count += 1
+                if first_point_mismatch is None:
+                  first_point_mismatch = mismatch
+
+          if candidate_point_count != candidate.get("complete_point_count"):
+            raise SystemExit("candidate complete point count does not match sidecar")
+          if oracle_point_count != oracle.get("complete_point_count"):
+            raise SystemExit("oracle complete point count does not match sidecar")
+          point_stream_equal = point_difference_count == 0
 
           report = {
-              "schema_version": 1,
-              "gate_id": "mzmine-v4.0.8-smoothing-direct-differential-v1",
+              "schema_version": 2,
+              "gate_id": "mzmine-v4.0.8-smoothing-direct-differential-v2",
               "candidate_commit": candidate["candidate_commit"],
               "oracle_commit": oracle["oracle_commit"],
               "input_sha256": candidate["input_sha256"],
@@ -273,13 +375,24 @@ jobs:
               "candidate_records_sha256": candidate["records_sha256"],
               "oracle_records_sha256": oracle["records_sha256"],
               "records_equal": records_equal,
-              "first_mismatch": first_mismatch,
+              "first_record_mismatch": first_record_mismatch,
+              "points_sidecar_format": candidate["points_sidecar_format"],
+              "candidate_complete_point_count": candidate_point_count,
+              "oracle_complete_point_count": oracle_point_count,
+              "candidate_points_sha256": candidate_points_sha,
+              "oracle_points_sha256": oracle_points_sha,
+              "point_stream_equal": point_stream_equal,
+              "point_difference_count": point_difference_count,
+              "first_point_mismatch": first_point_mismatch,
+              "point_differences_sha256": sha256_file(point_differences),
           }
           output_path.parent.mkdir(parents=True, exist_ok=True)
-          output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          report["report_sha256"] = hashlib.sha256(output_path.read_bytes()).hexdigest()
+          output_path.write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          report["report_sha256"] = sha256_file(output_path)
           print(json.dumps(report, indent=2, sort_keys=True))
-          if not records_equal:
+
+          if not records_equal or not point_stream_equal:
             raise SystemExit(1)
           PY
 
