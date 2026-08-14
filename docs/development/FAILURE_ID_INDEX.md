@@ -31,8 +31,8 @@ If a collision is found later, **do not delete or silently rewrite the original 
 the initial timestamp/content, assign the colliding record the next free canonical identifier, and
 record the alias/correction history in both locations.
 
-As of the reconciliation on **2026-08-14**, identifiers through `F-030` are allocated. The next
-identifier is `F-031` **only if a fresh repository-wide check confirms that no parallel branch has
+As of the reconciliation on **2026-08-14**, identifiers through `F-031` are allocated. The next
+identifier is `F-032` **only if a fresh repository-wide check confirms that no parallel branch has
 allocated it in the meantime**.
 
 ## Canonical allocation table
@@ -65,10 +65,11 @@ allocated it in the meantime**.
 | F-024 | Frozen v4 ADAP task required default feature-list sorting absent from the 3.9 line | ADAP task-probe compatibility work; scientific effect remains governed by direct differential evidence |
 | F-025 | Legacy JAXP provider rejected defense-in-depth XML access-control attributes | Implemented on ADAP branch; mandatory anti-XXE features retained. Its dedicated task-probe run later failed at direct differential execution, so F-025 alone does not validate ADAP parity |
 | F-026 | Parity-policy unit tests encoded the obsolete pre-PR #49 inventory state | **Validated** by PR #51 run `31810269951`; validator/scientific tolerances unchanged |
-| F-027 | Push/PR CI events can enter the same concurrency group and leave no successful run | Governance defect recorded during PR #51; any concurrency correction must be validated independently |
+| F-027 | Push/PR CI events shared one concurrency key and could cancel each other | **Validated as corrected**: merged workflow now includes `${{ github.event_name }}` in the concurrency group while retaining same-event cancellation; PR #51 reached a successful exact-head CI run |
 | F-028 | ADAP inventory referenced nonexistent `ModularADAPChromatogramBuilderParameters` | Source-provenance record on #50; canonical class is `ADAPChromatogramBuilderParameters`; no parity promotion |
 | F-029 | ADAP final feature-list ordering/renumbering differs between 3.9-line candidate and v4.0.8 task | Observed/source-classified; row identity/order must remain visible in the direct differential and must not be normalized away |
-| F-030 | Global failure-index placeholder was accidentally created directly on `open-offline-main` | **Validated as corrected**: original placeholder commit `85be47cdbab026422639683ff1ad8165a6d2a1c3`; correction replaced it in place with this complete index after the failure/proposal was recorded on #27 |
+| F-030 | Global failure-index placeholder was accidentally created directly on `open-offline-main` | **Validated as corrected**: original placeholder commit `85be47cdbab026422639683ff1ad8165a6d2a1c3`; correction `4b936b95e6eb4584343e879b73a9ea28db6b32a2` replaced it in place after the failure/proposal record |
+| F-031 | Accidental `docs/development/NOOP` file created while attempting branch-based follow-up work | **Validated as corrected**: original commit `3ef791d8769bff662a120390b3190d6fccad11ad`; cleanup commit `89f1d36f118998fd10b7d8918e1c08a770ddb723` removed only the accidental file after the failure/proposal record |
 
 ## Active ADAP note
 
@@ -105,9 +106,9 @@ issue records were reassigned while retaining their original text/history:
 - the issue #50 parameter-class record is canonical `F-028`;
 - the issue #50 ordering/renumbering record is canonical `F-029`.
 
-F-030 then demonstrated a second governance lesson: even documentation-only writes must obey the
-focused-branch workflow. Its correction was recorded before replacing the placeholder, and no
-scientific or parity state was changed.
+F-030 and F-031 then demonstrated a second governance lesson: even documentation-only operations
+must obey the focused-branch workflow and use the correct GitHub action for the intended resource.
+Both mistakes were recorded before their corrective mutations; neither changed scientific state.
 
 Future work must treat this file as a repository-global allocation lock in documentation form. A
 machine-enforced uniqueness check is recommended before the 4.0 release candidate.
