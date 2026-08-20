@@ -1,0 +1,137 @@
+name: Validate ROI-MCR on Public mzML
+
+on:
+  pull_request:
+    branches:
+      - open-offline-main
+    paths:
+      - src/main/java/io/github/mzmine/modules/dataprocessing/featdet_roimcr/**
+      - src/test/java/io/github/mzmine/modules/dataprocessing/featdet_roimcr/**
+      - .github/workflows/validate_roi_mcr_public_mzml.yml
+      - datasets/public_blank_replicate_manifest.json
+      - scripts/fetch_public_test_data.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-mzml-validation:
+    name: ROI-MCR public mzML (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Java 20
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "20"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate frozen public-data manifest
+        shell: bash
+        run: >-
+          python scripts/fetch_public_test_data.py
+          --manifest datasets/public_blank_replicate_manifest.json
+          --validate
+
+      - name: Download and verify approved mzML pair
+        shell: bash
+        run: |
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_blank_replicate_manifest.json \
+            --dataset zenodo-14001110-banane-30ngml-002 \
+            --dataset zenodo-14001110-blank-001 \
+            --output-dir build/public_validation_data \
+            --timeout 300 \
+            --retries 3
+          python scripts/fetch_public_test_data.py \
+            --manifest datasets/public_blank_replicate_manifest.json \
+            --dataset zenodo-14001110-banane-30ngml-002 \
+            --dataset zenodo-14001110-blank-001 \
+            --output-dir build/public_validation_data \
+            --verify-existing
+
+      - name: Execute ROI-MCR public validations on Linux
+        if: runner.os != 'Windows'
+        env:
+          OPEN_OFFLINE_PUBLIC_MZML_REPLICATE_2: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/Banane_30ngmL_002.mzML
+          OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}/build/public_validation_data/zenodo/14001110/blank_001.mzML
+        run: >-
+          ./gradlew test
+          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*Test"
+          --no-daemon
+          --stacktrace
+
+      - name: Execute ROI-MCR public validations on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          OPEN_OFFLINE_PUBLIC_MZML_REPLICATE_2: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\Banane_30ngmL_002.mzML
+          OPEN_OFFLINE_PUBLIC_MZML_BLANK_1: ${{ github.workspace }}\build\public_validation_data\zenodo\14001110\blank_001.mzML
+        run: >-
+          .\gradlew.bat test
+          --tests "io.github.mzmine.modules.dataprocessing.featdet_roimcr.RoiMcrPublic*Test"
+          --no-daemon
+          --stacktrace
+
+      - name: Display validation reports on Linux
+        if: always() && runner.os != 'Windows'
+        shell: bash
+        run: |
+          for report in build/roi_mcr_public_validation/*.json; do
+            if [[ -f "$report" ]]; then
+              echo "===== $report ====="
+              cat "$report"
+            fi
+          done
+
+      - name: Display validation reports on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem build/roi_mcr_public_validation/*.json -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "===== $($_.FullName) ====="
+            Get-Content $_.FullName
+          }
+
+      - name: Remove public dataset bytes on Linux
+        if: always() && runner.os != 'Windows'
+        run: rm -rf build/public_validation_data
+
+      - name: Remove public dataset bytes on Windows
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path build/public_validation_data) {
+            Remove-Item -Recurse -Force build/public_validation_data
+          }
+
+      - name: Upload diagnostic artifacts only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roi-mcr-public-validation-${{ matrix.os }}
+          path: |
+            build/roi_mcr_public_validation/*.json
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
+          retention-days: 14
